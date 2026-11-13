@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import mimetypes
 import os
 import re
@@ -130,6 +131,14 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
             asr['names'].setdefault(configured, describe_model(configured))
         return {'status': 'ok', 'providers': provider_status(), 'asr': asr,
                 'devices': {kind: devices.snapshot(kind) for kind in device_locks}}
+
+    @app.get('/api/mcp')
+    async def mcp():
+        """What an agent needs in order to start the read-only window onto the saved text (./start.sh mcp)."""
+        moved = store.root != (PROJECT / '.local' / 'data').resolve()      # then the agent must be told where the data is
+        return {'command': str(PROJECT / 'start.sh'), 'args': ['mcp'],
+                'env': {'RECORDING_DATA_DIR': str(store.root)} if moved else {},
+                'installed': importlib.util.find_spec('mcp') is not None}
 
     @app.get('/api/settings')
     async def settings():
@@ -391,7 +400,7 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
         candidate = (dist / requested).resolve()
         if candidate.is_relative_to(dist.resolve()) and candidate.is_file():
             return FileResponse(candidate)
-        if requested in {'', 'device', 'feishu', 'live', 'library', 'settings'} or re.fullmatch(r'live/records(/[\w.-]+)?', requested):
+        if requested in {'', 'device', 'feishu', 'live', 'agent', 'library', 'settings'} or re.fullmatch(r'live/records(/[\w.-]+)?', requested):
             if (dist / 'index.html').is_file():
                 return FileResponse(dist / 'index.html', headers={'Cache-Control': 'no-cache'})
             return JSONResponse({'detail': '前端尚未构建，请运行 pnpm build 或使用本地开发服务器'}, status_code=503)

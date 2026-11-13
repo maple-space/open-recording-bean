@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowRight, Bluetooth, Check, FileAudio, FileText, FolderOpen, LoaderCircle, MessagesSquare, RefreshCw } from 'lucide-react'
+import { ArrowRight, Bluetooth, Bot, Check, FileAudio, FileText, FolderOpen, LoaderCircle, MessagesSquare, RefreshCw } from 'lucide-react'
 import { api, deviceNames, formatDate } from './api.js'
 import { HardwareMark } from './DevicePanel.jsx'
 import { Link } from './Link.jsx'
@@ -79,6 +79,7 @@ export function HomePage({ device, records, online, navigate, onOpen, onCommunit
 
     <section className="home-more" aria-label="还能做什么">
       <Link href="/live/records" navigate={navigate}><FileText size={20} /><span><strong>文字记录</strong><small>每次实时输入的文字单独存成一个文件，句数没有上限，可以按时间翻看和搜索。</small></span></Link>
+      <Link href="/agent" navigate={navigate}><Bot size={20} /><span><strong>给 Agent 读</strong><small>通过 MCP，Claude Code、Codex 这类 Agent 可以按日期读这些文字、搜索、读刚才说了什么。只读。</small></span></Link>
       <Link href="/device" navigate={navigate}><Bluetooth size={20} /><span><strong>录音豆里的录音</strong><small>下载到本机，播放、转成文字、整理成纪要，也可以从录音豆上删除。</small></span></Link>
       <Link href="/library" navigate={navigate}><FolderOpen size={20} /><span><strong>本机资料库</strong><small>下载过的录音和导入的音频都在这里，设备断开也能用。</small></span></Link>
     </section>

@@ -34,6 +34,7 @@ input::placeholder, textarea::placeholder { color: #8c97a4; }
 .nav-tile.slate { background: linear-gradient(180deg, #8398ad, #5f7388); }
 .nav-tile.grey { background: linear-gradient(180deg, #a3a8af, #7d838b); }
 .nav-tile.mint { background: linear-gradient(180deg, #33d1c6, #0aa79d); }
+.nav-tile.pink { background: linear-gradient(180deg, #ff6482, #ef3a5d); }
 .portal-sidebar nav > a.active .nav-tile { box-shadow: 0 0 0 1.5px #ffffffb8; }
 .nav-divider { height: 14px; }
 .nav-online { width: 8px; height: 8px; background: #2fbf5b; border-radius: 50%; margin-left: auto; box-shadow: 0 0 0 2px #f2f3f5; }
@@ -275,7 +276,7 @@ h1, h2, h3, p { margin-top: 0; }
 .home-step p { font-size: 12px; color: #6f7d8d; line-height: 1.8; margin: 0 0 10px; overflow-wrap: anywhere; }
 .home-step p:last-child { margin-bottom: 0; }
 .home-step code { font: 11px/1.6 "SF Mono", Menlo, Consolas, monospace; background: #eaf0f5; padding: 2px 6px; border-radius: 5px; color: #33475c; white-space: nowrap; }
-.home-more { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 34px; }
+.home-more { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 34px; }
 .home-more > a { display: flex; gap: 12px; align-items: flex-start; padding: 17px 18px; border: 1px solid var(--line); border-radius: 12px; transition: border-color .18s, background .18s; }
 .home-more > a:hover { border-color: #9bc7f4; background: #f9fcff; }
 .home-more svg { flex: none; color: #6c9aca; margin-top: 1px; }
@@ -286,6 +287,27 @@ h1, h2, h3, p { margin-top: 0; }
 .home-community strong { font-size: 13px; font-weight: 600; }
 .home-community p { margin: 5px 0 0; font-size: 11px; color: #8491a1; line-height: 1.7; }
 .home-community .p-button { margin-left: auto; flex: none; }
+/* ---- for agents ---- */
+.agent-facts { display: flex; flex-wrap: wrap; gap: 16px 46px; margin: -6px 0 26px; padding: 17px 20px; border: 1px solid var(--line); border-radius: 10px; }
+.agent-facts dt { font-size: 10px; color: #8795a6; margin-bottom: 7px; }
+.agent-facts dd { margin: 0; font-size: 14px; font-weight: 640; color: #42566b; font-variant-numeric: tabular-nums; }
+.agent-snippet { margin: 12px 0 0 40px; }
+.agent-snippet > p { margin: 0 0 8px; font-size: 12px; color: #56677a; }
+.agent-code { position: relative; }
+.agent-code pre { margin: 0; padding: 14px 92px 14px 16px; border-radius: 9px; background: #1f2a37; color: #e6edf5; font: 12px/1.7 "SF Mono", ui-monospace, Menlo, monospace; overflow-x: auto; white-space: pre; }
+.agent-code .p-button { position: absolute; top: 9px; right: 9px; background: #2c3948; border-color: #3d4c5e; color: #dbe5f0; }
+.agent-code .p-button:hover:not(:disabled) { background: #364556; border-color: #53657a; }
+.agent-snippet .inline-help { margin: 10px 0 0; }
+.agent-questions { margin: 14px 0 2px 40px; padding: 0; list-style: none; display: grid; gap: 8px; }
+.agent-questions li { padding: 9px 13px; border-radius: 9px; background: var(--soft); font-size: 12px; color: #33475c; line-height: 1.7; }
+.agent-tools { margin-top: 30px; }
+.agent-tools table { width: 100%; border-collapse: collapse; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 12px; }
+.agent-tools th, .agent-tools td { padding: 11px 16px; border-bottom: 1px solid #eff2f5; text-align: left; vertical-align: top; line-height: 1.7; }
+.agent-tools tr:last-child th, .agent-tools tr:last-child td { border-bottom: 0; }
+.agent-tools th { width: 170px; font-weight: 500; white-space: nowrap; }
+.agent-tools code { font: 11px/1.6 "SF Mono", ui-monospace, Menlo, monospace; background: #eaf0f5; padding: 2px 7px; border-radius: 5px; color: #33475c; }
+.agent-tools td { color: #56677a; }
+@media (max-width: 600px) { .agent-snippet, .agent-questions { margin-left: 0; } .agent-tools th { width: auto; white-space: normal; } }
 /* ---- user group ---- */
 .community-dialog { position: relative; width: min(430px, 100%); max-height: 90dvh; overflow: auto; border-radius: 16px; padding: 28px; background: #fff; box-shadow: 0 20px 90px #10233d33; text-align: center; }
 .community-dialog > svg { color: #5c96cd; }

@@ -160,3 +160,16 @@ def test_health_names_the_configured_speech_model_in_full_even_when_it_is_not_in
         assert client.patch('/api/settings', json={'asr_model': 'medium'}).status_code == 200
         names = client.get('/api/health').json()['asr']['names']
         assert names['medium']['name'] == 'faster-whisper-medium' and 'funasr-nano' not in names
+
+
+def test_the_service_tells_the_page_how_an_agent_starts_the_read_only_window(tmp_path, monkeypatch):
+    import backend.app as module
+    with TestClient(create_app(tmp_path, devices=NoDevices()), base_url='http://127.0.0.1') as client:
+        told = client.get('/api/mcp').json()
+        assert told['command'] == str(module.PROJECT / 'start.sh') and told['args'] == ['mcp']
+        assert told['env'] == {'RECORDING_DATA_DIR': str(tmp_path.resolve())}       # the data is not in the usual place
+        assert isinstance(told['installed'], bool)
+        assert client.get('/api/mcp', headers={'Host': 'evil.test'}).status_code == 403
+    monkeypatch.setattr(module, 'PROJECT', tmp_path)                                 # data in the project's own folder
+    with TestClient(create_app(tmp_path / '.local' / 'data', devices=NoDevices()), base_url='http://127.0.0.1') as client:
+        assert client.get('/api/mcp').json()['env'] == {}

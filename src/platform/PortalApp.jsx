@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, Bluetooth, CheckCircle2, ChevronRight, FileText, FolderOpen, House, LoaderCircle, MessagesSquare, Mic, RefreshCw, Settings, ShieldCheck, X } from 'lucide-react'
+import { ArrowRight, Bluetooth, Bot, CheckCircle2, ChevronRight, FileText, FolderOpen, House, LoaderCircle, MessagesSquare, Mic, RefreshCw, Settings, ShieldCheck, X } from 'lucide-react'
 import { summarizeTranscript, transcribeAudio } from './siliconflow.js'
 import { api, humanError, initialSettings, jobFailure, terminalStatuses } from './api.js'
 import { DevicePanel } from './DevicePanel.jsx'
 import { HomePage } from './HomePage.jsx'
+import { AgentPage } from './AgentPage.jsx'
 import { CommunityDialog } from './CommunityDialog.jsx'
 import { Link } from './Link.jsx'
 import { project } from './project.js'
@@ -17,7 +18,7 @@ import './platform.css'
 
 const KIND = 'feishu'      // how the service and the stored records name the recorder
 const emptyDevice = { connected: false, files: [], info: {} }
-const pages = ['/', '/live', '/device', '/library', '/settings']
+const pages = ['/', '/live', '/agent', '/device', '/library', '/settings']
 
 // One row of the navigation bar: a white symbol on a coloured rounded square, then the name.
 function NavItem({ href, navigate, active, tone, icon: Icon, mark, children }) {
@@ -461,6 +462,7 @@ export default function PortalApp() {
         <NavItem href="/" navigate={navigate} tone="blue" icon={House} active={route === '/'}>开始使用</NavItem>
         <NavItem href="/live" navigate={navigate} tone="green" icon={Mic} active={route === '/live'} mark={device.live && <i className="nav-online" title="正在传声" />}>实时输入</NavItem>
         <NavItem href="/live/records" navigate={navigate} tone="orange" icon={FileText} active={recordsRoute}>文字记录</NavItem>
+        <NavItem href="/agent" navigate={navigate} tone="pink" icon={Bot} active={route === '/agent'}>给 Agent 用</NavItem>
         <NavItem href="/device" navigate={navigate} tone="indigo" icon={Bluetooth} active={onDevicePage} mark={device.connected && <i className="nav-online" title="已连接" />}>录音豆</NavItem>
         <div className="nav-divider" />
         <NavItem href="/library" navigate={navigate} tone="slate" icon={FolderOpen} active={route === '/library'} mark={<small>{records.length || ''}</small>}>本机资料库</NavItem>
@@ -469,7 +471,7 @@ export default function PortalApp() {
       <button type="button" className="sidebar-community" onClick={() => setCommunity(true)}><i className="nav-tile mint" aria-hidden="true"><MessagesSquare size={15} strokeWidth={2.2} /></i><span>加入用户群</span><ChevronRight size={15} /></button>
       <div className="sidebar-bottom"><ShieldCheck size={15} /><p>声音和文字留在本机。使用 AI 整理时，按所选模式处理。</p></div>
     </aside>
-    <main className="portal-main"><header className="portal-topbar"><span>{onDevicePage ? '录音豆 / 连接与录音文件' : route === '/library' ? '本机资料库' : route === '/settings' ? '模型与设置' : route === '/live' ? '实时输入' : recordsRoute ? '实时输入 / 文字记录' : '开始使用'}</span><div className={`service-state ${online === true ? 'online' : ''}`}><i />{online === null ? '正在连接本机服务' : online ? '本机服务已连接' : '本机服务未连接'}</div></header>
+    <main className="portal-main"><header className="portal-topbar"><span>{onDevicePage ? '录音豆 / 连接与录音文件' : route === '/library' ? '本机资料库' : route === '/settings' ? '模型与设置' : route === '/live' ? '实时输入' : route === '/agent' ? '给 Agent 用（MCP）' : recordsRoute ? '实时输入 / 文字记录' : '开始使用'}</span><div className={`service-state ${online === true ? 'online' : ''}`}><i />{online === null ? '正在连接本机服务' : online ? '本机服务已连接' : '本机服务未连接'}</div></header>
       {online === false && <div className="p-notice error" role="alert"><span>无法连接本机服务。请在项目文件夹里运行 ./start.sh；蓝牙连接、实时输入和后台任务都需要它在运行。</span><button className="p-button compact" onClick={refresh}><RefreshCw size={14} />重试</button></div>}
       {notice && <div className={`p-notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}><span>{notice.type === 'success' && <CheckCircle2 size={16} />}{notice.text}</span>{notice.recordId && <button className="text-link" onClick={() => openRecord(notice.recordId)}>在资料库打开</button>}<button className="p-icon-button" aria-label="关闭提示" onClick={() => setNotice(null)}><X size={16} /></button></div>}
       {busy && <div className="busy-indicator" role="status"><LoaderCircle className="p-spin" size={15} />{busy}… <span>蓝牙与设备任务由本机服务保持，刷新或关闭网页不会取消；可在下方查看或取消任务。</span></div>}
@@ -477,6 +479,7 @@ export default function PortalApp() {
         {route === '/' && <HomePage device={device} records={records} online={online} navigate={navigate} onOpen={openRecord} onCommunity={() => setCommunity(true)} />}
         {route === '/live' && <LivePage online={online} navigate={navigate} />}
         {recordsRoute && <LiveRecords name={recordName} navigate={navigate} />}
+        {route === '/agent' && <AgentPage records={records} />}
         {onDevicePage && device.live && <div className="p-notice" role="status"><span>实时输入正在进行，录音豆的蓝牙由它独占。刷新、下载、删除和录音控制要先关闭实时输入。</span><Link href="/live" navigate={navigate} className="text-link">去实时输入 <ArrowRight size={14} /></Link></div>}
         {onDevicePage && <DevicePanel snapshot={device} browserState={browserState} records={records} scans={scans} busy={effectiveBusy || (activeDeviceJobs ? 'device-job' : '') || (device.live ? 'live-input' : '')} online={online} onConnect={connectDevice} onScan={scanDevices}
           onRefresh={() => run('刷新录音列表', () => submitJob({ type: 'refresh', device_type: KIND }))}

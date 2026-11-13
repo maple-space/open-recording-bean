@@ -74,6 +74,8 @@ cd open-recording-bean
 
 让 Claude Code、Codex、Cursor 这类 Agent 直接读你保存的文字，比如“总结我今天下午说了什么”“上周谁提到过报价”。它是只读的：不能改，不能删，也不会去连录音豆。不配置就等于没有这个功能。
 
+网页左侧的“给 Agent 用”页面里有同样的说明，接入命令已经填好这台电脑上的实际路径，可以直接复制。
+
 在 Claude Code 里加一次就行，把路径换成你电脑上项目所在的位置：
 
 ```bash
@@ -152,7 +154,7 @@ Agent 能用六个工具：
 | `backend/asr.py`、`backend/providers.py`、`backend/workflows.py` | 录音的转写和整理 |
 | `backend/mcp_server.py`、`backend/text_records.py` | 给 Agent 用的只读接口，读文字记录文件 |
 | `backend/app.py`、`backend/storage.py`、`backend/jobs.py` | 本机服务、资料库、后台任务 |
-| `src/platform/` | 网页 |
+| `src/platform/` | 网页（其中 `AgentPage.jsx` 是“给 Agent 用”页面） |
 | `start.sh`、`scripts/` | 安装启动、下载模型、自检 |
 
 ## 隐私
@@ -233,6 +235,8 @@ Requires macOS, Node.js 20 or later and Python 3.10 to 3.13. Tested on an Intel 
 ### For agents (MCP)
 
 Agents such as Claude Code, Codex or Cursor can read the text you have saved: “summarise what I said this afternoon”, “who mentioned the quote last week”. It is read-only: it cannot change or delete anything and never connects to the recorder. Unless you set it up, it does not exist.
+
+The “给 Agent 用” page of the web interface has the same instructions, with the path of your own install already filled in, ready to copy.
 
 ```bash
 claude mcp add --scope user open-recording-bean -- /path/to/open-recording-bean/start.sh mcp
