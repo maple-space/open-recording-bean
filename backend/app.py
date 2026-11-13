@@ -121,15 +121,23 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
     async def invalid(request, error):
         return JSONResponse({'detail': str(error)}, status_code=400)
 
+    # The page asks for the routes below every few seconds, also while realtime input runs. They read
+    # the disk, and a disk can hang for seconds (a full one does). That wait must happen in a worker
+    # thread: on the main loop it would hold up the sound from the recorder for just as long.
     @app.get('/api/health')
     async def health():
         from .providers import provider_status
         from .asr import asr_status, describe_model
-        asr = asr_status()
-        configured = str(store.settings().get('asr_model') or '').strip()
-        if configured:                                  # also when it is not installed: the page still names it in full
-            asr['names'].setdefault(configured, describe_model(configured))
-        return {'status': 'ok', 'providers': provider_status(), 'asr': asr,
+
+        def on_disk():
+            asr = asr_status()
+            configured = str(store.settings().get('asr_model') or '').strip()
+            if configured:                              # also when it is not installed: the page still names it in full
+                asr['names'].setdefault(configured, describe_model(configured))
+            return provider_status(), asr
+
+        providers, asr = await asyncio.to_thread(on_disk)
+        return {'status': 'ok', 'providers': providers, 'asr': asr,
                 'devices': {kind: devices.snapshot(kind) for kind in device_locks}}
 
     @app.get('/api/mcp')
@@ -138,11 +146,11 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
         moved = store.root != (PROJECT / '.local' / 'data').resolve()      # then the agent must be told where the data is
         return {'command': str(PROJECT / 'start.sh'), 'args': ['mcp'],
                 'env': {'RECORDING_DATA_DIR': str(store.root)} if moved else {},
-                'installed': importlib.util.find_spec('mcp') is not None}
+                'installed': await asyncio.to_thread(importlib.util.find_spec, 'mcp') is not None}
 
     @app.get('/api/settings')
     async def settings():
-        return store.settings()
+        return await asyncio.to_thread(store.settings)
 
     @app.patch('/api/settings')
     async def settings_update(patch: dict):
@@ -150,7 +158,7 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
 
     @app.get('/api/records')
     async def records():
-        return store.records()
+        return await asyncio.to_thread(store.records)
 
     @app.post('/api/records/import')
     async def import_record(file: UploadFile = File(...), device_type: str = Form('local'),
@@ -306,7 +314,7 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
 
     @app.get('/api/jobs')
     async def jobs():
-        return store.jobs()
+        return await asyncio.to_thread(store.jobs)
 
     @app.get('/api/jobs/{job_id}')
     async def job(job_id: str):

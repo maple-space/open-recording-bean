@@ -9,6 +9,7 @@ import asyncio
 import functools
 import os
 import struct
+import threading
 import time
 from types import SimpleNamespace
 
@@ -596,6 +597,44 @@ def test_a_record_written_by_hand_or_cut_short_is_still_readable(tmp_path):
 
 # ---- who is speaking ---------------------------------------------------------- #
 
+@pytest.mark.asyncio
+async def test_a_disk_that_hangs_delays_the_record_file_and_nothing_else(tmp_path):
+    live = LiveInput(None, None, transcripts=tmp_path)
+    live.log.begin('soundcore Work', 'sensevoice-small', moment('2026-11-14 07:00:00'))
+    answers, write = threading.Event(), live.log.write
+    live.log.write = lambda *row: (answers.wait(10), write(*row))       # the disk does not answer (a full one does this)
+    began = time.monotonic()
+    live._absorb(dict(cursor=0), dict(segments=[dict(text='第一句。'), dict(text='第二句。')], segment_count=2))
+    assert time.monotonic() - began < 1                                 # whoever handed the sentences over is not held up
+    assert [row['text'] for row in live.segments] == ['第一句。', '第二句。'] and live.log.current()['sentences'] == 0
+    await asyncio.sleep(.05)                                            # the main loop keeps turning meanwhile
+    answers.set()
+    await live._saved()
+    said = (tmp_path / live.log.current()['file']).read_text(encoding='utf-8').splitlines()
+    assert [line[11:] for line in said if line.startswith('[')] == ['第一句。', '第二句。']       # all of it, in order
+
+
+@pytest.mark.asyncio
+async def test_the_page_keeps_asking_while_the_disk_hangs_and_the_service_keeps_answering(tmp_path):
+    app = create_app(tmp_path, devices=Devices(await connected(World())), realtime=RealtimeASR(fake_engine=True))
+    store, answers = app.state.storage, threading.Event()
+    records, jobs = store.records, store.jobs
+    store.records = lambda: (answers.wait(10), records())[1]            # the disk hangs under the page's two regular questions
+    store.jobs = lambda: (answers.wait(10), jobs())[1]
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+            waiting = [asyncio.create_task(client.get('/api/records')), asyncio.create_task(client.get('/api/jobs'))]
+            began = time.monotonic()
+            for _ in range(5):                                          # the realtime side is asked meanwhile, and answers
+                assert (await client.get('/api/live')).json()['status'] == 'off'
+            assert time.monotonic() - began < 2 and not any(task.done() for task in waiting)
+            answers.set()
+            assert [(await task).json() for task in waiting] == [[], []]
+    finally:
+        answers.set()
+        await app.state.devices.disconnect('feishu')
+
+
 def voice(*parts):
     """A made-up voiceprint: the same direction is the same voice."""
     return [float(value) for value in parts]
@@ -683,6 +722,7 @@ async def test_realtime_text_gets_speaker_numbers_that_survive_a_model_restart_a
         state = await live.start('虚拟声卡', True, None, 'zh')
         assert state['options']['speakers'] and state['transcript']['speakers'] == dict(on=True, count=0)
         await until(lambda: live.snapshot()['transcript']['next_cursor'] >= 2, 20)
+        await live._saved()                                               # the file is written behind the page
         view = live.snapshot(0)['transcript']
         assert view['speakers'] == dict(on=True, count=1)                 # the stand-in model hears one voice
         assert all(row['speaker'] == 1 for row in view['segments'])
@@ -726,6 +766,7 @@ async def test_each_time_it_is_switched_on_the_text_goes_to_a_new_file_and_the_p
         assert first['transcript']['session'] == dict(started=first['since'], open=True, saving=True, file=None,
                                                       sentences=0, characters=0, error=None)
         await until(lambda: live.snapshot()['transcript']['next_cursor'] >= 2, 20)
+        await live._saved()
         name = live.snapshot()['transcript']['session']['file']
         path = tmp_path / 'live-transcripts' / name
         assert len(said(path)) >= 2                                       # written while it is still on
@@ -763,8 +804,11 @@ async def test_the_page_keeps_the_newest_sentences_and_the_file_keeps_them_all(t
         live._absorb(live.asr, dict(segments=[dict(text=f'第 {number} 句') for number in range(total)], segment_count=live.asr['cursor']))
         view = live.snapshot(0)['transcript']
         assert view['kept'] == KEPT_SEGMENTS and len(view['segments']) == KEPT_SEGMENTS
-        assert view['segments'][-1]['text'] == f'第 {total - 1} 句' and view['session']['sentences'] >= total
-        lines = (tmp_path / view['session']['file']).read_text(encoding='utf-8').splitlines()
+        assert view['segments'][-1]['text'] == f'第 {total - 1} 句'
+        await live._saved()                                               # the file is written behind the page
+        session = live.snapshot()['transcript']['session']
+        assert session['sentences'] >= total
+        lines = (tmp_path / session['file']).read_text(encoding='utf-8').splitlines()
         assert sum(1 for line in lines if line.endswith('第 0 句')) == 1 and sum(1 for line in lines if line.startswith('[')) >= total
     finally:
         await live.stop()

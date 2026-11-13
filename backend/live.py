@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
@@ -253,6 +254,10 @@ class LiveInput:
                  retry_delays=(1, 2, 5, 10, 30), settle_seconds=15.0, transcripts=None):
         self.device, self.realtime = device, realtime
         self.log = TranscriptLog(transcripts)
+        # Everything that touches the record file runs on this one thread, in the order it was handed
+        # over. A disk can hang for seconds (a full one does); on the main loop that would hold up the
+        # sound from the recorder for just as long.
+        self.recorder = ThreadPoolExecutor(max_workers=1, thread_name_prefix='text-record')
         self.reveal = show_in_finder
         self.bridge_factory, self.stream, self.delays = bridge_factory, stream, retry_delays
         self.settle_seconds = settle_seconds
@@ -315,7 +320,15 @@ class LiveInput:
                     raise
                 asr = dict(id=session['id'], cursor=0, model=session['model'], language=language,
                            speakers=bool(session.get('speakers')), restarted_at=0.0)
-            self.bridge, self.asr = bridge, asr
+            since = time.time()
+            try:                                     # the new record begins behind whatever is still being written
+                await asyncio.wrap_future(self.recorder.submit(
+                    self.log.begin, self.device.snapshot().get('device_name'), asr and asr['model'], since))
+            except BaseException:
+                if bridge:
+                    bridge.close()
+                raise
+            self.bridge, self.asr = bridge, asr      # from here to the end nothing waits: the switch is on or it is not
             self.want_speakers = bool(speakers)
             self.voices = Voices()                   # a new record numbers its speakers from 1 again
             self.options = dict(output=output or None, transcribe=bool(transcribe), model=asr and asr['model'], language=language,
@@ -326,9 +339,8 @@ class LiveInput:
             self.pcm.clear()
             self.levels.clear()
             self.last_audio_at = None
-            self.since = time.time()
+            self.since = since
             self.segments.clear()                    # each session is its own record; earlier ones are in their files
-            self.log.begin(self.device.snapshot().get('device_name'), asr and asr['model'], self.since)
             self.stop_event = asyncio.Event()
             self.task = asyncio.create_task(self._run())
             return self.snapshot(self.next_index)
@@ -576,7 +588,7 @@ class LiveInput:
                                                    may_open=words >= NEW_SPEAKER_WORDS)
                 self.segments.append(dict(index=self.next_index, at=at, text=text, speaker=speaker))
                 self.next_index += 1
-                self.log.write(at, text, speaker)
+                self.recorder.submit(self.log.write, at, text, speaker)
         asr['cursor'] = state.get('segment_count', asr['cursor'])
         self.partial = ((state.get('partial') or {}).get('text') or '').strip() or None
         self.lag = state.get('lag_seconds') or 0.0
@@ -595,7 +607,11 @@ class LiveInput:
                 self._absorb(asr, await self.realtime.finish(asr['id'], asr['cursor'], voices=True))
         self.pcm.clear()
         self.partial = None
-        self.log.end()
+        await self._saved(self.log.end)
+
+    async def _saved(self, then=None):
+        """Returns once every sentence handed over so far is in the file (and *then*, if given, has run after them)."""
+        await asyncio.wrap_future(self.recorder.submit(then or (lambda: None)))
 
     # ---- view -------------------------------------------------------------------- #
     def _status(self):
