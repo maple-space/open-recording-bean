@@ -142,7 +142,7 @@ cd open-recording-bean
 ## 来源与致谢
 
 - 代码基于 [Shawn-TKD/recording-bean-web](https://github.com/Shawn-TKD/recording-bean-web)（MIT）开发，原版权声明保留在 [LICENSE](LICENSE) 里。
-- 协议实现参考了 [tacshi/Soundcore](https://github.com/tacshi/Soundcore)（MIT，Copyright (c) 2026 Rocky Shi）公开的研究，并在固件 04.92 的真机上重新测量和验证。
+- 协议实现参考了社区研究项目 [tacshi/Soundcore](https://github.com/tacshi/Soundcore)（MIT，Copyright (c) 2026 Rocky Shi），并结合本项目在 D3200（固件 04.92）上的实机抓包与验证重新实现。
 - 识别用的是 [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)，区分说话人用的是 [3D-Speaker](https://github.com/modelscope/3D-Speaker) 的 CAM++，两者都通过 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 运行。
 
 完整的第三方来源和许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
@@ -188,7 +188,7 @@ Requires macOS, Node.js 20 or later and Python 3.10 to 3.13. Tested on an Intel 
 ### Sources and thanks
 
 - The code is built on [Shawn-TKD/recording-bean-web](https://github.com/Shawn-TKD/recording-bean-web) (MIT); its copyright notice is kept in [LICENSE](LICENSE).
-- The protocol implementation draws on the public research of [tacshi/Soundcore](https://github.com/tacshi/Soundcore) (MIT, Copyright (c) 2026 Rocky Shi), measured and verified again on a real recorder with firmware 04.92.
+- The protocol implementation draws on the community research project [tacshi/Soundcore](https://github.com/tacshi/Soundcore) (MIT, Copyright (c) 2026 Rocky Shi), and was written anew from this project's own packet captures and verification on a real D3200 (firmware 04.92).
 - Speech is recognised by [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) and speakers are told apart by CAM++ from [3D-Speaker](https://github.com/modelscope/3D-Speaker), both run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
 
 All third-party sources and licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
