@@ -16,7 +16,8 @@
 | **区分说话人** | 每句话前标“说话人1、说话人2…”。只分辨是不是同一个人，不知道姓名，也不保存声纹。 |
 | **文字记录** | 每次开启单独存成一个文本文件，句数没有上限，不会互相覆盖。可以按小时翻看、搜索、复制、下载。 |
 | **管理录音** | 读取录音豆里的录音，下载到本机，播放、转成文字、整理成纪要、打包导出，也可以从录音豆上删除。 |
-| **留在本机** | 声音、文字、录音都存在这台电脑上。只有你自己选择用云端模型整理文字时，那段文字才会发出去。 |
+| **给 Agent 读** | 通过 MCP，Claude Code、Codex 这类 Agent 可以按日期读你保存的文字、搜索、读“刚才说了什么”。只读，不配置就没有。 |
+| **留在本机** | 声音、文字、录音都存在这台电脑上。只有你自己选择用云端模型整理文字，或者让 Agent 来读时，文字才会发出去。 |
 
 ![文字记录：按小时翻看，可以搜索](docs/images/records.png)
 
@@ -69,6 +70,47 @@ cd open-recording-bean
 
 用完以后在网页上点“关闭实时输入”，并把输入法的麦克风改回“自动检测”。
 
+## 给 Agent 用（MCP）
+
+让 Claude Code、Codex、Cursor 这类 Agent 直接读你保存的文字，比如“总结我今天下午说了什么”“上周谁提到过报价”。它是只读的：不能改，不能删，也不会去连录音豆。不配置就等于没有这个功能。
+
+在 Claude Code 里加一次就行，把路径换成你电脑上项目所在的位置：
+
+```bash
+claude mcp add --scope user open-recording-bean -- /你的路径/open-recording-bean/start.sh mcp
+```
+
+Codex 写在 `~/.codex/config.toml` 里：
+
+```toml
+[mcp_servers.open-recording-bean]
+command = "/你的路径/open-recording-bean/start.sh"
+args = ["mcp"]
+```
+
+其他客户端（Claude 桌面版、Cursor 等）在它的 MCP 配置里加：
+
+```json
+{
+  "mcpServers": {
+    "open-recording-bean": { "command": "/你的路径/open-recording-bean/start.sh", "args": ["mcp"] }
+  }
+}
+```
+
+Agent 能用六个工具：
+
+| 工具 | 作用 |
+| --- | --- |
+| `list_days` | 哪些天有文字，每天多少句 |
+| `read_text` | 读某一天或其中一段时间的实时文字，每句带时间和说话人，内容多时分页 |
+| `latest_text` | 读最近几分钟，回答“刚才说了什么” |
+| `search_text` | 在实时文字和录音的文字里找词 |
+| `list_recordings` | 列出资料库里的录音 |
+| `read_recording` | 读一条录音的文字和总结 |
+
+它直接读 `.local/data` 里的文字记录文件和资料库，本机服务不开也能用。MCP 本身不联网。但 Agent 读到的文字会交给它背后的模型处理，用云端模型的 Agent 就意味着这些文字会发到那个服务。
+
 ## 实测情况
 
 下面是实际测过的，没测过的也写明了。
@@ -108,6 +150,7 @@ cd open-recording-bean
 | `backend/feishu_live.py`、`backend/live.py` | 实时传声、送虚拟声卡、文字记录文件 |
 | `backend/realtime_asr.py`、`backend/speakers.py` | 实时识别和区分说话人 |
 | `backend/asr.py`、`backend/providers.py`、`backend/workflows.py` | 录音的转写和整理 |
+| `backend/mcp_server.py`、`backend/text_records.py` | 给 Agent 用的只读接口，读文字记录文件 |
 | `backend/app.py`、`backend/storage.py`、`backend/jobs.py` | 本机服务、资料库、后台任务 |
 | `src/platform/` | 网页 |
 | `start.sh`、`scripts/` | 安装启动、下载模型、自检 |
@@ -118,6 +161,7 @@ cd open-recording-bean
 - 录音、文字记录、设置都放在项目文件夹的 `.local/` 里，这个文件夹不会被提交到 Git。
 - 区分说话人只在一次实时输入期间在内存里比较声音，不保存声纹，也不知道是谁。
 - 用“硅基流动 API”“Codex CLI”或“Claude”整理文字时，相应的文字（选 API 转写时还有音频）会发给你选择的那个服务。API Key 只保留在当前网页的内存里，不写入磁盘。
+- 给 Agent 用的 MCP 只有你自己配置以后才会被启动。它只读不写，Agent 读到的文字由它背后的模型处理。
 - 项目不收集任何使用数据。
 
 ## 已知限制
@@ -175,7 +219,8 @@ This is an unofficial, independent open-source project. It is not connected with
 - **Speakers told apart.** Each sentence is labelled speaker 1, speaker 2 and so on. Only whether it is the same voice is known, never who it is, and no voiceprint is kept.
 - **Text records.** Every session is saved as its own text file, with no limit on length, to browse by the hour, search, copy and download.
 - **Recordings.** Recordings on the device can be downloaded, played, transcribed, summarised, exported and deleted.
-- **Kept on your computer.** Sound, text and recordings stay on this computer. Text leaves it only when you choose a cloud model to tidy it up.
+- **For agents.** Through MCP, agents such as Claude Code or Codex can read the saved text by day, search it and read the last few minutes. Read-only, and absent unless you set it up.
+- **Kept on your computer.** Sound, text and recordings stay on this computer. Text leaves it only when you choose a cloud model to tidy it up, or let an agent read it.
 
 ```bash
 git clone https://github.com/maple-space/open-recording-bean.git
@@ -184,6 +229,43 @@ cd open-recording-bean
 ```
 
 Requires macOS, Node.js 20 or later and Python 3.10 to 3.13. Tested on an Intel MacBook Pro with macOS 15.7 and recorder firmware 04.92. The interface is in Simplified Chinese.
+
+### For agents (MCP)
+
+Agents such as Claude Code, Codex or Cursor can read the text you have saved: “summarise what I said this afternoon”, “who mentioned the quote last week”. It is read-only: it cannot change or delete anything and never connects to the recorder. Unless you set it up, it does not exist.
+
+```bash
+claude mcp add --scope user open-recording-bean -- /path/to/open-recording-bean/start.sh mcp
+```
+
+For Codex, in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.open-recording-bean]
+command = "/path/to/open-recording-bean/start.sh"
+args = ["mcp"]
+```
+
+For other clients (Claude Desktop, Cursor and so on), in their MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "open-recording-bean": { "command": "/path/to/open-recording-bean/start.sh", "args": ["mcp"] }
+  }
+}
+```
+
+| Tool | What it does |
+| --- | --- |
+| `list_days` | Which days have text, and how many sentences each |
+| `read_text` | The realtime text of a day or of a stretch of it, each sentence with its time and speaker, in pages when it is long |
+| `latest_text` | The last few minutes: “what was just said” |
+| `search_text` | Find words in the realtime text and in the text of recordings |
+| `list_recordings` | The recordings in the library |
+| `read_recording` | The text and summary of one recording |
+
+It reads the text record files and the library in `.local/data` directly, so it works without the local service running. The MCP itself sends nothing anywhere. What an agent reads is handled by the model behind it, so with a cloud model that text goes to that service.
 
 ### Sources and thanks
 

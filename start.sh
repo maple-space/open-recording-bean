@@ -4,6 +4,7 @@
 #   ./start.sh            第一次：安装需要的东西并下载模型；之后：直接启动
 #   ./start.sh models     下载或补全本机识别模型（实时文字和说话人）
 #   ./start.sh doctor     检查这台电脑还缺什么
+#   ./start.sh mcp        给 Agent 用的只读接口（由 Agent 自己启动，见 README）
 #   ./start.sh test       运行全部测试
 #
 # 可以用的环境变量：
@@ -55,12 +56,12 @@ ensure_python() {
 # 依赖清单变了才重新安装。
 ensure_packages() {
   local stamp=.venv/.installed wanted
-  wanted=$(cat backend/requirements.txt backend/requirements-live.txt | shasum -a 256 | cut -d' ' -f1)
+  wanted=$(cat backend/requirements.txt backend/requirements-live.txt backend/requirements-mcp.txt | shasum -a 256 | cut -d' ' -f1)
   [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$wanted" ] && return 0
   say '安装本机服务需要的组件（只做一次，约一两分钟）'
   "$PY" -m pip install --quiet --disable-pip-version-check --upgrade pip
   # 只用现成的安装包，不在这台电脑上编译：没有编译工具的电脑也能装，Intel Mac 会自动选到还提供安装包的版本。
-  "$PY" -m pip install --quiet --disable-pip-version-check --only-binary=:all: -r backend/requirements.txt -r backend/requirements-live.txt
+  "$PY" -m pip install --quiet --disable-pip-version-check --only-binary=:all: -r backend/requirements.txt -r backend/requirements-live.txt -r backend/requirements-mcp.txt
   echo "$wanted" > "$stamp"
 }
 
@@ -122,6 +123,11 @@ case "${1:-run}" in
     ensure_packages
     exec "$PY" scripts/fetch_models.py
     ;;
+  mcp)
+    # 给 Agent 用的只读接口。它用标准输入输出和 Agent 对话，所以准备环境时的提示一律写到标准错误，不能混进去。
+    { ensure_python; ensure_packages; } >&2
+    exec "$PY" -m backend.mcp_server
+    ;;
   doctor)
     if [ -x "$PY" ]; then exec "$PY" scripts/doctor.py; fi
     found=$(suitable_python) || found=python3
@@ -135,7 +141,7 @@ case "${1:-run}" in
     if command -v pnpm >/dev/null 2>&1; then pnpm install --silent && pnpm test; else npm install --no-audit --no-fund --loglevel=error && npm test; fi
     ;;
   -h|--help|help)
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
     ;;
   *)
     fail "不认识的命令：$1。运行 ./start.sh help 查看用法。"

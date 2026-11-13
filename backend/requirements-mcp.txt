@@ -1,0 +1,2 @@
+# The agents' window (./start.sh mcp): the official Model Context Protocol kit for Python.
+mcp>=2,<3

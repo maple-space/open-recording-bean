@@ -29,6 +29,7 @@
 | [PyAV](https://github.com/PyAV-Org/PyAV) | 解码录音豆的 Opus 音频（安装包内含 FFmpeg 的库） | BSD-3-Clause；FFmpeg 为 LGPL/GPL |
 | [python-sounddevice](https://github.com/spatialaudio/python-sounddevice) | 向虚拟声卡播放（内含 PortAudio） | MIT |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | 运行识别模型和说话人模型（内含 ONNX Runtime） | Apache-2.0；ONNX Runtime 为 MIT |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) | 给 Agent 用的只读接口 | MIT |
 | [React](https://github.com/facebook/react)、[Vite](https://github.com/vitejs/vite) | 网页 | MIT |
 | [Lucide](https://github.com/lucide-icons/lucide)、[fflate](https://github.com/101arrowz/fflate) | 图标、打包导出 | ISC、MIT |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper)（可选） | 用 Whisper 模型转写录音 | MIT |
