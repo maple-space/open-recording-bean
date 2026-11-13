@@ -2,8 +2,8 @@
 
 **把录音豆变成电脑的无线麦克风，同时在本机实时转成带说话人的文字。**
 
-适用于 soundcore Work（安克 AI 录音豆、飞书录音豆，型号 D3200）。
-这是非官方的开源项目，与安克创新、soundcore、飞书没有关联。[English](#english)
+适用于 soundcore Work（安克 AI 录音豆、飞书录音豆，型号 D3200，固件版本号支持 04.92，固件升级随时可能让它失效）。
+这是非官方的开源独立项目，与 Anker、安克创新、soundcore、飞书无关。[English](#english)
 
 ![实时输入页面：录音豆的声音正在变成带说话人的文字](docs/images/live.png)
 
@@ -129,17 +129,6 @@ cd open-recording-bean
 - 录音豆到电脑走的是低功耗蓝牙，下载长录音比较慢，需要耐心。本项目还没有实现 Wi‑Fi 传输。
 - 不做固件升级、解绑、恢复出厂这类操作，也不会去试探没有验证过的指令。固件更新后协议可能变化，功能随时可能失效。
 
-## 社群
-
-用法交流、问题反馈都在微信群里，用微信扫码进群：
-
-<img src="public/community/wechat-qr.png" alt="用户群的微信二维码" width="260">
-
-群二维码 7 天内有效，过期后会在这里更新。扫不了的话，到 Issues 里说一声。
-
-- 报告问题：到 [Issues](https://github.com/maple-space/open-recording-bean/issues) 里写清楚哪一步不成功、页面上的提示是什么。
-- 请不要在公开的地方贴出录音、文字记录或设备序列号。
-
 ## 参与贡献
 
 欢迎提交问题和代码。没有录音豆也能开发和测试：测试用的是一台按真机实测行为编写的模拟录音豆。
@@ -160,7 +149,7 @@ cd open-recording-bean
 
 ## 免责声明
 
-- 本项目是独立的开源项目，与安克创新（Anker Innovations）、soundcore、飞书没有任何关联，也没有得到它们的认可或赞助。文中出现的「Anker」「安克」「soundcore Work」「飞书」「D3200」「录音豆」等，仅用于描述本项目与之互操作的硬件，相关名称、商标归各自权利人所有。
+- 本项目是独立的开源项目，与 Anker、安克创新（Anker Innovations）、soundcore、飞书没有任何关联，也没有得到它们的认可或赞助。文中出现的「Anker」「安克」「soundcore Work」「飞书」「D3200」「录音豆」等，仅用于描述本项目与之互操作的硬件，相关名称、商标归各自权利人所有。
 - 本项目仅用于与你自己拥有、或已获明确授权管理的设备进行互操作（interoperability），帮助设备所有者在自己的电脑上使用自己的设备，并把自己的录音从自己的硬件上取回。
 - 本项目不包含、不分发任何官方固件、私钥、设备凭据、账号信息或官方 App（APK/IPA）。其中的协议实现参考了公开的社区研究（见上面的“来源与致谢”），并在自己拥有的设备上实测验证。
 - 本项目不提供服务器、不托管任何人的数据、不代为运营。数据都保存在使用者自己的电脑上；只有使用者自己选择用云端模型整理文字时，相应内容才会发给那个服务。
@@ -176,13 +165,17 @@ cd open-recording-bean
 
 ## English
 
-**open-recording-bean turns the soundcore Work recorder (D3200, also sold as 飞书录音豆) into a wireless microphone for your Mac, with live local transcription.**
+**open-recording-bean turns the recorder into a wireless microphone for your Mac, and turns what is said into text with speaker labels, live and on your own computer.**
 
-It is an unofficial open-source project, not affiliated with Anker Innovations, soundcore or Feishu.
+For the soundcore Work (Anker's AI recorder, also sold as the Feishu recorder 飞书录音豆; model D3200). Firmware 04.92 is supported; a firmware update may break it at any time.
+This is an unofficial, independent open-source project. It is not connected with Anker, Anker Innovations, soundcore or Feishu.
 
-- **A microphone for any app.** Live audio from the recorder goes over Bluetooth LE to a local service and on to a virtual sound card (BlackHole), which dictation tools and meeting apps can select as their microphone.
-- **Live text with speakers.** Sentences appear in the browser as you speak, recognised on your Mac by SenseVoice Small and labelled speaker 1, speaker 2 and so on by a CAM++ speaker model. Nothing is sent to a cloud.
-- **Records and recordings.** Every session is saved as its own text file. Recordings on the device can be downloaded, played, transcribed, summarised and deleted.
+- **A microphone for any app.** Live audio from the recorder goes over Bluetooth to a local service and on to a virtual sound card (BlackHole), which dictation tools and any app that lets you choose a microphone can use.
+- **Live text.** Sentences appear in the browser as you speak, recognised on your Mac by SenseVoice Small. Nothing is sent to a cloud.
+- **Speakers told apart.** Each sentence is labelled speaker 1, speaker 2 and so on. Only whether it is the same voice is known, never who it is, and no voiceprint is kept.
+- **Text records.** Every session is saved as its own text file, with no limit on length, to browse by the hour, search, copy and download.
+- **Recordings.** Recordings on the device can be downloaded, played, transcribed, summarised, exported and deleted.
+- **Kept on your computer.** Sound, text and recordings stay on this computer. Text leaves it only when you choose a cloud model to tidy it up.
 
 ```bash
 git clone https://github.com/maple-space/open-recording-bean.git
@@ -190,6 +183,41 @@ cd open-recording-bean
 ./start.sh          # sets everything up on first run, then opens http://127.0.0.1:8875
 ```
 
-Requires macOS, Node.js 20+ and Python 3.10 to 3.13. Tested on an Intel MacBook Pro with macOS 15.7 and recorder firmware 04.92. The interface is in Simplified Chinese.
+Requires macOS, Node.js 20 or later and Python 3.10 to 3.13. Tested on an Intel MacBook Pro with macOS 15.7 and recorder firmware 04.92. The interface is in Simplified Chinese.
 
-Built on [Shawn-TKD/recording-bean-web](https://github.com/Shawn-TKD/recording-bean-web) (MIT), with protocol research from [tacshi/Soundcore](https://github.com/tacshi/Soundcore) (MIT). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Licensed under [MIT](LICENSE).
+### Sources and thanks
+
+- The code is built on [Shawn-TKD/recording-bean-web](https://github.com/Shawn-TKD/recording-bean-web) (MIT); its copyright notice is kept in [LICENSE](LICENSE).
+- The protocol implementation draws on the public research of [tacshi/Soundcore](https://github.com/tacshi/Soundcore) (MIT, Copyright (c) 2026 Rocky Shi), measured and verified again on a real recorder with firmware 04.92.
+- Speech is recognised by [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) and speakers are told apart by CAM++ from [3D-Speaker](https://github.com/modelscope/3D-Speaker), both run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
+
+All third-party sources and licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### Disclaimer
+
+- This is an independent open-source project. It has no connection with Anker, Anker Innovations, soundcore or Feishu, and is not endorsed or sponsored by them. Names that appear here, such as “Anker”, “安克”, “soundcore Work”, “飞书” (Feishu), “D3200” and “录音豆”, are used only to describe the hardware this project works with. The names and trademarks belong to their respective owners.
+- It is meant only for interoperability with devices that you own or are explicitly authorised to manage: to let owners use their own device on their own computer and take their own recordings off their own hardware.
+- It does not contain or distribute any official firmware, private keys, device credentials, account information or official apps (APK/IPA). The protocol implementation draws on public community research (see “Sources and thanks” above) and was verified on a device the author owns.
+- It provides no server, hosts nobody's data and runs no service. Data is kept on the user's own computer; only when the user chooses a cloud model to tidy up text is that content sent to that service.
+- It is published for personal learning, research and interoperability. Users must follow the laws of where they live and the terms of use of the devices and services involved. Whether and how to use it is for each user to judge, at their own responsibility.
+- Back up recordings that matter. Before recording other people, follow local law and get their consent.
+- It comes with no warranty of any kind, express or implied. The authors and contributors accept no liability for any consequence of using it or of being unable to use it. See the [MIT licence](LICENSE).
+
+### Licence
+
+[MIT](LICENSE)
+
+---
+
+## 社群
+
+用法交流、问题反馈都在微信群里，用微信扫码进群：
+
+<img src="public/community/wechat-qr.png" alt="用户群的微信二维码" width="260">
+
+群二维码 7 天内有效，过期后会在这里更新。扫不了的话，到 Issues 里说一声。
+
+- 报告问题：到 [Issues](https://github.com/maple-space/open-recording-bean/issues) 里写清楚哪一步不成功、页面上的提示是什么。
+- 请不要在公开的地方贴出录音、文字记录或设备序列号。
+
+Community: questions and feedback are shared in a WeChat group. Scan the code above with WeChat to join. The code is valid for 7 days and is replaced here when it expires.
