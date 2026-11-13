@@ -292,7 +292,7 @@ h1, h2, h3, p { margin-top: 0; }
 .community-dialog h2 { font-size: 19px; margin: 12px 0 10px; }
 .community-dialog p { color: #738194; font-size: 12px; line-height: 1.8; margin-bottom: 0; }
 .community-close { position: absolute; top: 14px; right: 14px; }
-.community-qr { display: block; width: min(240px, 100%); aspect-ratio: 1; object-fit: contain; margin: 16px auto 4px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.community-qr { display: block; width: min(280px, 100%); height: auto; margin: 16px auto 4px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .community-missing { margin-top: 16px; padding: 26px 16px; border: 1px dashed #dbe3ec; border-radius: 12px; background: #f7f9fc; }
 .community-dialog .hint { margin-top: 10px; }
 .community-links { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 8px; text-align: left; }

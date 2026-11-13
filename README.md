@@ -213,7 +213,7 @@ All third-party sources and licences are listed in [THIRD_PARTY_NOTICES.md](THIR
 
 用法交流、问题反馈都在微信群里，用微信扫码进群：
 
-<img src="public/community/wechat-qr.png" alt="用户群的微信二维码" width="260">
+<img src="docs/images/wechat-group.png" alt="用户群的微信二维码" width="260">
 
 群二维码 7 天内有效，过期后会在这里更新。扫不了的话，到 Issues 里说一声。
 
