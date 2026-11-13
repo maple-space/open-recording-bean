@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 240" role="img" aria-label="录音豆示意图">
+  <!-- An original drawing for this project: a round clip-on recorder with sound around it. Not a product photo. -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbfcfe"/>
+      <stop offset="1" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e3e9f0"/>
+      <stop offset="1" stop-color="#a7b4c3"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="140" cy="214" rx="74" ry="9" fill="#1f3a5a" opacity=".09"/>
+  <g fill="none" stroke="#087ff5" stroke-width="5" stroke-linecap="round">
+    <path d="M44 92c-12 17-12 39 0 56" opacity=".55"/>
+    <path d="M24 76c-20 28-20 60 0 88" opacity=".28"/>
+    <path d="M236 92c12 17 12 39 0 56" opacity=".55"/>
+    <path d="M256 76c20 28 20 60 0 88" opacity=".28"/>
+  </g>
+  <circle cx="140" cy="122" r="84" fill="url(#rim)"/>
+  <circle cx="140" cy="117" r="78" fill="url(#face)"/>
+  <g fill="#8494a6">
+    <rect x="119" y="58" width="42" height="13" rx="6.5"/>
+    <rect x="119" y="163" width="42" height="13" rx="6.5"/>
+  </g>
+  <g fill="#f4f7fa">
+    <circle cx="128" cy="64.5" r="1.7"/><circle cx="134" cy="64.5" r="1.7"/><circle cx="140" cy="64.5" r="1.7"/><circle cx="146" cy="64.5" r="1.7"/><circle cx="152" cy="64.5" r="1.7"/>
+    <circle cx="128" cy="169.5" r="1.7"/><circle cx="134" cy="169.5" r="1.7"/><circle cx="140" cy="169.5" r="1.7"/><circle cx="146" cy="169.5" r="1.7"/><circle cx="152" cy="169.5" r="1.7"/>
+  </g>
+  <circle cx="140" cy="86" r="4.5" fill="#f59a23"/>
+</svg>
