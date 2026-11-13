@@ -16,10 +16,6 @@
 - 许可：MIT，`Copyright (c) 2026 Rocky Shi`。完整许可文本随仓库提供：[licenses/tacshi-Soundcore-MIT.txt](licenses/tacshi-Soundcore-MIT.txt)
 - 关系：录音豆的通信协议、加密和音频封装参考了这个项目公开的研究，涉及 `backend/feishu_protocol.py`、`backend/feishu.py`、`backend/feishu_live.py`。本项目没有直接运行它的代码，实时传声部分的行为是在固件 04.92 的真机上重新测量的。分发本项目的源码或构建产物时，请一并保留这份版权声明和许可文本。
 
-### openbean
-
-[imraywang/openbean](https://github.com/imraywang/openbean)（Apache-2.0）是同一款硬件上的另一个开源项目。本项目把它当作参照，没有使用它的代码。
-
 ## 运行时安装的组件
 
 这些组件不在本仓库里，由 `./start.sh` 通过 pip 和 pnpm（或 npm）安装，各自保持自己的许可：

@@ -71,16 +71,15 @@ cd open-recording-bean
 
 ## 和同类项目的关系
 
-围绕这款录音豆已经有几个很好的开源项目，侧重各不相同。本项目是在其中两个的基础上做的，补的是“当麦克风”这一块。
+本项目是在下面两个开源项目的基础上做的，补的是“当麦克风”这一块。
 
 | 项目 | 形态 | 侧重 |
 | --- | --- | --- |
 | **本项目** | 本机服务加网页，macOS | 录音豆的实时声音送进虚拟声卡，给任何输入法和软件当麦克风；网页上实时出字、区分说话人、逐次保存文字记录；录音管理。Intel Mac 和 macOS 15 可用。 |
-| [imraywang/openbean](https://github.com/imraywang/openbean) | 原生 macOS App | 按录音豆的按键说话，文字直接打到光标处；Wi‑Fi 快速同步录音；给 Agent 用的 MCP。要求 macOS 26 和 Apple 芯片。 |
 | [Shawn-TKD/recording-bean-web](https://github.com/Shawn-TKD/recording-bean-web) | 纯网页，浏览器直连 | 不用安装，Chrome 或 Edge 打开网页就能连接录音豆、下载和整理录音。本项目的代码基础。 |
 | [tacshi/Soundcore](https://github.com/tacshi/Soundcore) | Flutter App | 手机和电脑上的本地管理 App，以及公开的协议研究。本项目协议部分的参考来源。 |
 
-如果你用的是新款 Mac，只想按一下录音豆就打字，openbean 更省事。如果你想继续用自己习惯的输入法或会议软件，或者电脑是 Intel Mac，可以试试本项目。
+想继续用自己习惯的输入法或会议软件，或者电脑是 Intel Mac，都适合用本项目。
 
 ## 实测情况
 
@@ -168,7 +167,6 @@ cd open-recording-bean
 - 代码基于 [Shawn-TKD/recording-bean-web](https://github.com/Shawn-TKD/recording-bean-web)（MIT）开发，原版权声明保留在 [LICENSE](LICENSE) 里。
 - 协议实现参考了 [tacshi/Soundcore](https://github.com/tacshi/Soundcore)（MIT，Copyright (c) 2026 Rocky Shi）公开的研究，并在固件 04.92 的真机上重新测量和验证。
 - 识别用的是 [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)，区分说话人用的是 [3D-Speaker](https://github.com/modelscope/3D-Speaker) 的 CAM++，两者都通过 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 运行。
-- [openbean](https://github.com/imraywang/openbean) 是同一款硬件上很好的参照，本项目没有使用它的代码。
 
 完整的第三方来源和许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
