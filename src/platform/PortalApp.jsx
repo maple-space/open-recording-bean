@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, AudioLines, Bluetooth, CheckCircle2, FileText, FolderOpen, House, LoaderCircle, MessagesSquare, Mic, RefreshCw, Settings2, ShieldCheck, X } from 'lucide-react'
+import { ArrowRight, Bluetooth, CheckCircle2, ChevronRight, FileText, FolderOpen, House, LoaderCircle, MessagesSquare, Mic, RefreshCw, Settings, ShieldCheck, X } from 'lucide-react'
 import { summarizeTranscript, transcribeAudio } from './siliconflow.js'
 import { api, humanError, initialSettings, jobFailure, terminalStatuses } from './api.js'
 import { DevicePanel } from './DevicePanel.jsx'
@@ -18,6 +18,13 @@ import './platform.css'
 const KIND = 'feishu'      // how the service and the stored records name the recorder
 const emptyDevice = { connected: false, files: [], info: {} }
 const pages = ['/', '/live', '/device', '/library', '/settings']
+
+// One row of the navigation bar: a white symbol on a coloured rounded square, then the name.
+function NavItem({ href, navigate, active, tone, icon: Icon, mark, children }) {
+  return <Link href={href} navigate={navigate} className={active ? 'active' : ''} aria-current={active ? 'page' : undefined}>
+    <i className={`nav-tile ${tone}`} aria-hidden="true"><Icon size={15} strokeWidth={2.2} /></i><span>{children}</span>{mark}
+  </Link>
+}
 
 // The address bar's path; '/feishu' is what the recorder's page was called in earlier versions.
 function currentRoute() {
@@ -449,18 +456,18 @@ export default function PortalApp() {
   }
 
   return <div className="portal-app">
-    <aside className="portal-sidebar"><Link href="/" navigate={navigate} className="portal-brand"><span><AudioLines size={23} /></span><div><strong>{project.title}</strong><small>{project.name.toUpperCase()}</small></div></Link>
+    <aside className="portal-sidebar"><Link href="/" navigate={navigate} className="portal-brand"><img src="/favicon.svg" alt="" width="40" height="40" /><div><strong>{project.title}</strong><small>{project.name}</small></div></Link>
       <nav aria-label="主导航">
-        <Link href="/" navigate={navigate} className={route === '/' ? 'active' : ''}><House size={18} /><span>开始使用</span></Link>
-        <Link href="/live" navigate={navigate} className={route === '/live' ? 'active' : ''}><Mic size={18} /><span>实时输入</span>{device.live && <i className="nav-online" />}</Link>
-        <Link href="/live/records" navigate={navigate} className={recordsRoute ? 'active' : ''}><FileText size={18} /><span>文字记录</span></Link>
-        <Link href="/device" navigate={navigate} className={onDevicePage ? 'active' : ''}><Bluetooth size={18} /><span>录音豆</span>{device.connected && <i className="nav-online" />}</Link>
+        <NavItem href="/" navigate={navigate} tone="blue" icon={House} active={route === '/'}>开始使用</NavItem>
+        <NavItem href="/live" navigate={navigate} tone="green" icon={Mic} active={route === '/live'} mark={device.live && <i className="nav-online" title="正在传声" />}>实时输入</NavItem>
+        <NavItem href="/live/records" navigate={navigate} tone="orange" icon={FileText} active={recordsRoute}>文字记录</NavItem>
+        <NavItem href="/device" navigate={navigate} tone="indigo" icon={Bluetooth} active={onDevicePage} mark={device.connected && <i className="nav-online" title="已连接" />}>录音豆</NavItem>
         <div className="nav-divider" />
-        <Link href="/library" navigate={navigate} className={route === '/library' ? 'active' : ''}><FolderOpen size={18} /><span>本机资料库</span><small>{records.length || ''}</small></Link>
-        <Link href="/settings" navigate={navigate} className={route === '/settings' ? 'active' : ''}><Settings2 size={18} /><span>模型与设置</span></Link>
+        <NavItem href="/library" navigate={navigate} tone="slate" icon={FolderOpen} active={route === '/library'} mark={<small>{records.length || ''}</small>}>本机资料库</NavItem>
+        <NavItem href="/settings" navigate={navigate} tone="grey" icon={Settings} active={route === '/settings'}>模型与设置</NavItem>
       </nav>
-      <button type="button" className="sidebar-community" onClick={() => setCommunity(true)}><MessagesSquare size={17} /><span>加入用户群</span></button>
-      <div className="sidebar-bottom"><ShieldCheck size={18} /><div><strong>声音和文字留在本机</strong><p>使用 AI 整理时按所选模式处理</p></div></div>
+      <button type="button" className="sidebar-community" onClick={() => setCommunity(true)}><i className="nav-tile mint" aria-hidden="true"><MessagesSquare size={15} strokeWidth={2.2} /></i><span>加入用户群</span><ChevronRight size={15} /></button>
+      <div className="sidebar-bottom"><ShieldCheck size={15} /><p>声音和文字留在本机。使用 AI 整理时，按所选模式处理。</p></div>
     </aside>
     <main className="portal-main"><header className="portal-topbar"><span>{onDevicePage ? '录音豆 / 连接与录音文件' : route === '/library' ? '本机资料库' : route === '/settings' ? '模型与设置' : route === '/live' ? '实时输入' : recordsRoute ? '实时输入 / 文字记录' : '开始使用'}</span><div className={`service-state ${online === true ? 'online' : ''}`}><i />{online === null ? '正在连接本机服务' : online ? '本机服务已连接' : '本机服务未连接'}</div></header>
       {online === false && <div className="p-notice error" role="alert"><span>无法连接本机服务。请在项目文件夹里运行 ./start.sh；蓝牙连接、实时输入和后台任务都需要它在运行。</span><button className="p-button compact" onClick={refresh}><RefreshCw size={14} />重试</button></div>}
