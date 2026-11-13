@@ -41,12 +41,12 @@ export function localModelKey(value) {
 const regularWhisper = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large-v1', 'large-v2', 'large-v3'])
 
 // What a local speech model is called on screen: its full name, which is the name of the model repository
-// it comes from (sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17, Fun-ASR-Nano-GGUF, faster-whisper-small) and nothing else. The local service reports the
+// it comes from (SenseVoiceSmall, Fun-ASR-Nano-GGUF, faster-whisper-small) and nothing else. The local service reports the
 // exact name (`names`, from /api/health); the rule below gives the same name when it does not.
 export function localModelName(value, names) {
   const id = localModelKey(value)
   if (names?.[id]?.name) return names[id].name
-  if (id === 'sensevoice-small') return 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17'
+  if (id === 'sensevoice-small') return 'SenseVoiceSmall'
   if (id === 'funasr-nano') return 'Fun-ASR-Nano-GGUF'
   if (/^[~./\\]|\\|^[A-Za-z]:/.test(id)) return id        // a model directory: shown as typed
   if (id.includes('/')) return id.split('/').pop()           // organisation/repository: the repository is the model's name

@@ -59,7 +59,7 @@ class ASRTests(unittest.IsolatedAsyncioTestCase):
             status = self.a.asr_status()
             self.assertTrue(status["sensevoice"] and status["available"])
             self.assertEqual((status["models"][0], status["default_model"]), ("sensevoice-small", "sensevoice-small"))
-            self.assertEqual(status["names"]["sensevoice-small"]["name"], "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17")
+            self.assertEqual(status["names"]["sensevoice-small"]["name"], "SenseVoiceSmall")
             (root / "sensevoice" / "tokens.txt").rename(root / "sensevoice" / "tokens.bak")
             self.assertNotIn("sensevoice-small", self.a.asr_status()["models"])
         with patch.dict("os.environ", {"RECORDING_ASR_DIR": str(self.sensevoice_directory())}), patch.object(self.a, "_sensevoice_runs", return_value=False):

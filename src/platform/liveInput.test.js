@@ -97,9 +97,9 @@ test('durations, storage and level are shown in everyday units', () => {
 
 test('local speech models are shown by their full names, the repository names, and Fun-ASR-Nano is the default', () => {
   assert.equal(initialSettings.asr_model, 'sensevoice-small')
-  assert.equal(localModelName('sensevoice-small'), 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17')
+  assert.equal(localModelName('sensevoice-small'), 'SenseVoiceSmall')
   assert.equal(localModelName('funasr-nano'), 'Fun-ASR-Nano-GGUF')
-  assert.equal(localModelName(''), 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17')   // nothing chosen: the model that is installed by default
+  assert.equal(localModelName(''), 'SenseVoiceSmall')   // nothing chosen: the model that is installed by default
   assert.equal(localModelName('Nano'), 'Fun-ASR-Nano-GGUF')
   assert.equal(localModelName('small'), 'faster-whisper-small')
   assert.equal(localModelName('large-v3'), 'faster-whisper-large-v3')

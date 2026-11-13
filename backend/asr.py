@@ -19,7 +19,7 @@ class ASRError(RuntimeError):
 
 PROJECT = Path(__file__).resolve().parents[1]
 SENSEVOICE_ID = "sensevoice-small"
-SENSEVOICE_NAME = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"     # the repository its files come from
+SENSEVOICE_NAME = "SenseVoiceSmall"     # the model's own name, which is also the name of its repository
 SENSEVOICE_MISSING = ("未找到 SenseVoice Small 的本地文件（model.int8.onnx 和 tokens.txt）。在项目文件夹运行 ./start.sh models "
                       "会下载到 .local/asr/sensevoice/。也可以在“模型与设置”里改用其他本机模型。")
 NANO_ID = "funasr-nano"

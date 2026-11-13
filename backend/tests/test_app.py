@@ -154,7 +154,7 @@ def test_health_names_the_configured_speech_model_in_full_even_when_it_is_not_in
     with TestClient(app, base_url='http://127.0.0.1') as client:
         asr = client.get('/api/health').json()['asr']
         assert asr['models'] == [] and list(asr['names']) == ['sensevoice-small']     # the default setting
-        assert asr['names']['sensevoice-small'] == dict(id='sensevoice-small', name='sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17')
+        assert asr['names']['sensevoice-small'] == dict(id='sensevoice-small', name='SenseVoiceSmall')
         assert client.patch('/api/settings', json={'asr_model': 'funasr-nano'}).status_code == 200
         assert client.get('/api/health').json()['asr']['names'] == {'funasr-nano': dict(id='funasr-nano', name='Fun-ASR-Nano-GGUF')}
         assert client.patch('/api/settings', json={'asr_model': 'medium'}).status_code == 200
