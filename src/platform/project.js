@@ -5,7 +5,7 @@ export const project = {
   repo: 'https://github.com/maple-space/open-recording-bean',
   // The picture people scan to join the user group. Put it at public/community/wechat-qr.png and build again.
   wechatQr: '/community/wechat-qr.png',
-  wechatNote: '加好友时请备注“录音豆”，会拉你进用户群。',
+  wechatNote: '群二维码 7 天内有效，过期后项目主页上会更新。',
 }
 
 export function repoUrl(path = '') {

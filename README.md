@@ -144,7 +144,11 @@ cd open-recording-bean
 
 ## 社群
 
-用户微信群的二维码稍后放在这里。
+用法交流、问题反馈都在微信群里，用微信扫码进群：
+
+<img src="public/community/wechat-qr.png" alt="用户群的微信二维码" width="260">
+
+群二维码 7 天内有效，过期后会在这里更新。扫不了的话，到 Issues 里说一声。
 
 - 报告问题：到 [Issues](https://github.com/maple-space/open-recording-bean/issues) 里写清楚哪一步不成功、页面上的提示是什么。
 - 请不要在公开的地方贴出录音、文字记录或设备序列号。
