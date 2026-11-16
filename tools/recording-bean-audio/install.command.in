@@ -1,0 +1,70 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -euo pipefail
+driver_release_dir="$(cd "$(dirname "$0")" && pwd)"
+cd "$driver_release_dir"
+driver_check='/Library/Audio/Plug-Ins/HAL/RecordingBeanAudio2ch.driver/Contents/Helpers/check-device'
+driver_finish() {
+    if [ -t 0 ]; then
+        read -r -p '按回车关闭安装窗口…' driver_done || true
+    fi
+}
+trap driver_finish EXIT
+
+printf '%s  %s\n' '@PACKAGE_HASH@' '@PACKAGE_NAME@' | /usr/bin/shasum -a 256 -c -
+printf '\n安装 Recording Bean Audio 2ch；不会重启电脑或修改默认麦克风。\n'
+printf '请在本机提示中输入管理员密码（输入时不显示字符）。\n'
+/usr/bin/sudo /usr/sbin/installer -pkg "$driver_release_dir/@PACKAGE_NAME@" -target /
+printf '%s  %s\n' '@CHECK_HASH@' "$driver_check" | /usr/bin/shasum -a 256 -c -
+
+driver_wait_ready() {
+    local driver_attempt driver_check_status
+    for ((driver_attempt=0; driver_attempt<$1; driver_attempt++)); do
+        if "$driver_check" >/dev/null; then
+            return 0
+        else
+            driver_check_status=$?
+            if [ "$driver_check_status" != 1 ]; then return 2; fi
+        fi
+        /bin/sleep 1
+    done
+    return 1
+}
+driver_ready_message() {
+    printf '\n声卡已就绪，不需要重启电脑。\n'
+    printf '网页输出和 Typeless/豆包麦克风都选择：Recording Bean Audio 2ch。\n'
+}
+if driver_wait_ready 5; then
+    driver_ready_message
+    exit 0
+else
+    driver_wait_status=$?
+fi
+if [ "$driver_wait_status" = 2 ]; then
+    printf '\n文件已安装，但无法查询系统声卡状态。未重新加载音频服务，请保留报错用于排查。\n' >&2
+    exit 1
+fi
+
+printf '\n文件已安装，系统尚未加载声卡。\n'
+printf '现在可以重新加载系统音频服务 CoreAudio（coreaudiod），让新声卡出现。\n'
+printf '正在播放、会议或录音的声音会短暂中断；不会退出应用，也不重启电脑。\n'
+read -r -p '现在重新加载系统音频服务？输入 y 确认，其他输入暂不启用：[y/N] ' driver_answer || driver_answer=''
+case "$driver_answer" in
+    y|Y)
+        # Exact launchd service; never terminate user apps or use broad process matching.
+        if ! /usr/bin/sudo /bin/launchctl kickstart -k system/com.apple.audio.coreaudiod; then
+            printf '\n系统未允许重新加载音频服务。文件仍已安装；未尝试其他终止操作。\n' >&2
+            exit 1
+        fi
+        if driver_wait_ready 30; then
+            driver_ready_message
+        else
+            printf '\n音频服务已重新加载，但声卡仍未就绪。请保留此输出用于排查驱动加载问题。\n' >&2
+            exit 2
+        fi
+        ;;
+    *)
+        printf '\n已保留安装文件，暂不重新加载音频服务。需要时再次双击本安装入口即可。\n'
+        exit 2
+        ;;
+esac

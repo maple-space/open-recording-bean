@@ -1,0 +1,9 @@
+# Realtime input: recorder -> virtual sound card and live local text.
+# Install into the project .venv:  python -m pip install -r backend/requirements-live.txt
+numpy>=1.26,<3
+# Decodes the recorder's Opus frames. Same upper bound as requirements-asr.txt.
+av>=11,<19
+# Plays the decoded audio into the virtual sound card (PortAudio is bundled on macOS).
+sounddevice>=0.5,<1
+# Runs the SenseVoice Small model (model.int8.onnx + tokens.txt in .local/asr/sensevoice/).
+sherpa-onnx>=1.12,<3

@@ -1,0 +1,17 @@
+# installed and built
+node_modules/
+.venv/
+dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# everything this computer keeps: recordings, text records, models, settings, test runs
+.local/
+
+# never commit keys
+.env
+.env.*
+!.env.example
+
+.DS_Store

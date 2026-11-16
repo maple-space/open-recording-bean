@@ -1,0 +1,4 @@
+faster-whisper>=1.2,<2
+# faster-whisper 1.2.1 still passes metadata_errors, removed by PyAV 19.
+# https://github.com/SYSTRAN/faster-whisper/issues/1589
+av>=11,<19

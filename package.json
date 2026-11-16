@@ -1,0 +1,22 @@
+{
+  "name": "open-recording-bean",
+  "private": true,
+  "version": "0.1.0",
+  "description": "录音豆（soundcore Work / 飞书录音豆 D3200）的开源本地工具：当电脑麦克风、实时转文字、区分说话人、管理录音。非官方项目。",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test src/platform/*.test.js"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.0.5",
+    "fflate": "^0.8.3",
+    "lucide-react": "^1.31.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "vite": "^8.2.1"
+  }
+}
