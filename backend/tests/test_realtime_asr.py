@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
-from backend.realtime_asr import RealtimeASR, RealtimeASRError, SAMPLE_RATE, UtteranceSegmenter
+from backend.realtime_asr import MAX_CHUNK_BYTES, RealtimeASR, RealtimeASRError, SAMPLE_RATE, UtteranceSegmenter
 
 
 class NoDevices:
@@ -176,6 +176,8 @@ async def test_a_new_session_replaces_the_old_one_and_bad_input_is_rejected():
         with pytest.raises(RealtimeASRError):
             await asr.push(second['id'], b'\x00\x01\x02')
         with pytest.raises(RealtimeASRError):
+            await asr.push(second['id'], bytes(MAX_CHUNK_BYTES + 2))       # more than one request may carry
+        with pytest.raises(RealtimeASRError):
             await asr.start(language='klingon')
         assert asr.status()['active_session'] == second['id']   # a rejected request leaves the running session alone
     finally:
@@ -200,7 +202,8 @@ def test_status_lists_engines_and_explains_what_is_missing(monkeypatch):
     monkeypatch.setattr(asr_module, 'asr_status', lambda: {'installed': False, 'models': [], 'message': '未安装本地转写依赖。', 'downloads_automatically': False})
     monkeypatch.setattr(live, '_sensevoice_files', lambda: None)
     status = RealtimeASR().status('small')
-    assert status['ready'] is False and status['default_model'] is None and '不会自动下载' in status['message']
+    assert status['ready'] is False and status['default_model'] is None
+    assert './start.sh models' in status['message'] and '不会自动下载' in status['message']
     assert [row['id'] for row in status['engines']] == ['sensevoice-small', 'small', 'base', 'turbo']
     assert all(not row['available'] and row['missing'] for row in status['engines'])
 
@@ -225,32 +228,20 @@ def test_fastest_available_engine_is_the_default_and_an_explicit_choice_wins(mon
 
 
 # ---- HTTP API ------------------------------------------------------------- #
-def test_realtime_api_round_trip_and_limits(tmp_path):
-    app = create_app(tmp_path, devices=NoDevices(), realtime=RealtimeASR(fake_engine=True))
+def test_the_page_can_ask_what_is_ready_but_cannot_open_a_session_of_its_own(tmp_path):
+    realtime = RealtimeASR(fake_engine=True)
+    app = create_app(tmp_path, devices=NoDevices(), realtime=realtime)
     with TestClient(app, base_url='http://127.0.0.1') as client:
         status = client.get('/api/realtime/status').json()
         assert status['ready'] is True and status['languages'] == ['zh', 'en', 'auto']
-        assert client.post('/api/realtime/sessions', json={'language': 'fr'}).status_code == 422
-        assert client.post('/api/realtime/sessions', json={'language': 'zh'}, headers={'Origin': 'https://example.com'}).status_code == 403
-        session = client.post('/api/realtime/sessions', json={'language': 'zh'}).json()
-        url = f"/api/realtime/sessions/{session['id']}"
-        signal = np.concatenate([room(0.5), tone(1.5), room(1.2, seed=2)])
-        for offset in range(0, len(signal), 8000):
-            response = client.post(url + '/audio', content=pcm(signal[offset:offset + 8000]), headers={'Content-Type': 'application/octet-stream'})
-            assert response.status_code == 200, response.text
-        deadline = time.monotonic() + 10
-        state = client.get(url).json()
-        while not state['segment_count'] and time.monotonic() < deadline:
-            time.sleep(0.05)
-            state = client.get(url).json()
-        assert state['segments'][0]['text'].startswith('语音')
-        assert client.get(url, params={'cursor': 1}).json()['segments'] == []
-        assert client.post(url + '/audio', content=b'\x01').status_code == 400
-        assert client.post(url + '/audio', content=b'\0' * (4 * 1024 * 1024 + 2)).status_code == 413
-        assert client.post('/api/realtime/sessions/unknown/audio', content=b'\0\0').status_code == 404
-        finished = client.post(url + '/finish').json()
-        assert finished['closed'] and finished['text'].startswith('语音')
-        assert client.post(url + '/audio', content=b'\0\0').status_code == 400
+        assert client.get('/api/realtime/status', headers={'Host': 'evil.test'}).status_code == 403
+        # There is one session at a time and realtime input owns it: a request from outside would end
+        # the one that is turning the recorder's sound into text.
+        assert client.post('/api/realtime/sessions', json={'language': 'zh'}).status_code in {404, 405}
+        assert client.get('/api/realtime/sessions/anything').status_code == 404
+        assert client.post('/api/realtime/sessions/anything/audio', content=b'\0\0').status_code in {404, 405}
+        assert client.post('/api/realtime/sessions/anything/finish').status_code in {404, 405}
+        assert realtime.status()['active_session'] is None
         assert client.get('/live').status_code in {200, 503}
 
 

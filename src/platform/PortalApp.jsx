@@ -9,7 +9,7 @@ import { Link } from './Link.jsx'
 import { project } from './project.js'
 import { RecordEditor, RecordWorkspace } from './RecordWorkspace.jsx'
 import { ConfirmDialog } from './ConfirmDialog.jsx'
-import { matchingArchive, processApiRecord, usesLocalTranscription, buildSelectedArchive, verifyCompleteDeviceBackup } from './workflow.js'
+import { matchingArchive, processApiRecord, usesLocalTranscription, buildSelectedArchive } from './workflow.js'
 import { JobPanel, PlatformSettings } from './SettingsJobs.jsx'
 import { LivePage } from './LivePage.jsx'
 import { LiveRecords } from './LiveRecords.jsx'
@@ -356,13 +356,6 @@ export default function PortalApp() {
       const selected = recordsRef.current.filter((record) => ids.includes(record.id))
       if (selected.length) setDeleteRequest({ type: 'local', records: selected })
       return true
-    })
-  }
-
-  async function verifyBackup(record, deviceId, file) {
-    return verifyCompleteDeviceBackup(record, deviceId, file, {
-      loadRecords: () => api('/api/records'),
-      loadAudio: (id) => fetch(`/api/records/${encodeURIComponent(id)}/audio`, { cache: 'no-store' }),
     })
   }
 

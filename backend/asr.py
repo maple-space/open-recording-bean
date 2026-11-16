@@ -1,4 +1,5 @@
-"""Optional local ASR in a cancellable, offline worker process: Fun-ASR-Nano (GGUF) or faster-whisper."""
+"""Local ASR for whole recordings in a cancellable, offline worker process:
+SenseVoice Small (sherpa-onnx), Fun-ASR-Nano (GGUF) or faster-whisper."""
 from __future__ import annotations
 
 import importlib.util

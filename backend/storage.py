@@ -25,6 +25,22 @@ DEFAULT_SETTINGS = {'provider': 'api', 'asr': 'local', 'codex_model': '', 'claud
 EDIT_FIELDS = {'title', 'tags', 'transcript', 'summary', 'summary_template', 'custom_prompt'}
 INTERNAL_FIELDS = EDIT_FIELDS | {'raw_transcript', 'segments', 'language', 'duration_ms', 'summary_provider', 'summary_source_transcript', 'generated_summary', 'generated_transcript', 'transcript_provider'}
 AUDIO_SUFFIXES = {'.wav', '.ogg', '.opus', '.mp3', '.m4a', '.flac', '.webm', '.mp4', '.aac'}
+TRASH_COMMAND = Path('/usr/bin/trash')      # comes with macOS 14 and later
+
+
+def _trash_through_the_system(path) -> bool:
+    """Move *path* to the Trash without the trash command, for macOS 11 to 13.
+
+    Foundation offers the same move on every macOS this project runs on, and the Bluetooth
+    library already installs its Python binding. True when the move was made.
+    """
+    import objc
+    from Foundation import NSURL, NSFileManager
+
+    with objc.autorelease_pool():           # this runs in a worker thread, which has no pool of its own
+        moved, _, _ = NSFileManager.defaultManager().trashItemAtURL_resultingItemURL_error_(
+            NSURL.fileURLWithPath_(str(path)), None, None)
+    return bool(moved)
 
 
 class Storage:
@@ -164,11 +180,19 @@ class Storage:
         (directory / 'metadata.json').write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
         (directory / 'transcript.txt').write_text(record.get('transcript', ''), encoding='utf-8')
         (directory / 'summary.md').write_text(record.get('summary', ''), encoding='utf-8')
-        try:
-            result = subprocess.run(['/usr/bin/trash', str(directory)], capture_output=True, timeout=30, check=False)
-        except (OSError, subprocess.TimeoutExpired):
-            raise ValueError('未能移入 macOS 废纸篓，请检查系统权限后重试。') from None
-        if result.returncode != 0 or directory.exists():
+        if TRASH_COMMAND.is_file():
+            try:
+                result = subprocess.run([str(TRASH_COMMAND), str(directory)], capture_output=True, timeout=30, check=False)
+            except (OSError, subprocess.TimeoutExpired):
+                raise ValueError('未能移入 macOS 废纸篓，请检查系统权限后重试。') from None
+            moved = result.returncode == 0
+        else:
+            try:
+                moved = _trash_through_the_system(directory)
+            except Exception:
+                raise ValueError('未能移入 macOS 废纸篓：这台电脑没有系统自带的 trash 命令（macOS 14 起提供），'
+                                 '也无法改用系统接口。资料库记录已保留。') from None
+        if not moved or directory.exists():
             raise ValueError('未能移入 macOS 废纸篓，资料库记录已保留。')
         record['trashed_at'] = now()
         self._write('records', record_id, record)

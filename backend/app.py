@@ -1,4 +1,4 @@
-"""Loopback-only API and production web host for BeanMic."""
+"""Loopback-only API and production web host for open-recording-bean."""
 from __future__ import annotations
 
 import asyncio
@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from .jobs import JobManager
-from .realtime_asr import MAX_CHUNK_BYTES, RealtimeASR
+from .realtime_asr import RealtimeASR
 from .storage import AUDIO_SUFFIXES, Storage
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -41,12 +41,6 @@ class GeneratedResultRequest(BaseModel):
     baseline_summary: str = Field(max_length=2_000_000)
     baseline_summary_template: Literal['meeting', 'memo', 'interview', 'custom'] = 'meeting'
     baseline_custom_prompt: str = Field(default='', max_length=2_000_000)
-
-
-class RealtimeStartRequest(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    model: str | None = Field(default=None, max_length=160)
-    language: Literal['zh', 'en', 'auto'] = 'zh'
 
 
 def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
@@ -81,7 +75,7 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
             except Exception:
                 pass
 
-    app = FastAPI(title='BeanMic', lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title='open-recording-bean', lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.storage = store
     app.state.jobs = manager
     app.state.devices = devices
@@ -274,43 +268,11 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
         async with device_locks[kind]:
             return await devices.disconnect(kind)
 
-    # ---- live transcription of audio the page decodes from the recorder ----
-    def realtime_missing():
-        return HTTPException(404, '实时转写会话不存在或已结束，请重新开始')
-
+    # Which local speech models can run right now. The page only asks: there is one session at a
+    # time, and realtime input (backend/live.py) starts and feeds it inside the service.
     @app.get('/api/realtime/status')
     async def realtime_status():
         return realtime.status()
-
-    @app.post('/api/realtime/sessions')
-    async def realtime_start(body: RealtimeStartRequest):
-        return await realtime.start(body.model, body.language)
-
-    @app.post('/api/realtime/sessions/{session_id}/audio')
-    async def realtime_audio(session_id: str, request: Request, cursor: int = 0):
-        chunks = bytearray()
-        async for chunk in request.stream():
-            if len(chunks) + len(chunk) > MAX_CHUNK_BYTES:
-                raise HTTPException(413, '单次上传的音频过大')
-            chunks.extend(chunk)
-        try:
-            return await realtime.push(session_id, bytes(chunks), cursor)
-        except KeyError:
-            raise realtime_missing() from None
-
-    @app.get('/api/realtime/sessions/{session_id}')
-    async def realtime_snapshot(session_id: str, cursor: int = 0):
-        try:
-            return realtime.snapshot(session_id, cursor)
-        except KeyError:
-            raise realtime_missing() from None
-
-    @app.post('/api/realtime/sessions/{session_id}/finish')
-    async def realtime_finish(session_id: str, cursor: int = 0):
-        try:
-            return await realtime.finish(session_id, cursor)
-        except KeyError:
-            raise realtime_missing() from None
 
     @app.get('/api/jobs')
     async def jobs():

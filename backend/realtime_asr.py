@@ -1,9 +1,11 @@
-"""Live, local speech-to-text for audio the web page decodes from the recorder.
+"""Live, local speech-to-text for realtime input (backend/live.py).
 
-The page posts 16 kHz mono PCM. One long-lived, offline worker process keeps a
-cached faster-whisper model loaded, cuts the stream into utterances, and returns
-text as soon as each utterance ends (plus a provisional text while it is still
-being spoken). Audio is never written to disk and never leaves this machine.
+The service decodes the recorder's sound and hands over 16 kHz mono PCM. One long-lived,
+offline worker process keeps a local model loaded (SenseVoice Small through sherpa-onnx, or a
+cached faster-whisper model), cuts the stream into utterances, and returns text as soon as each
+utterance ends (plus a provisional text while it is still being spoken). With a speaker model in
+place it also returns a voiceprint for every sentence. Audio is never written to disk here and
+never leaves this machine.
 """
 from __future__ import annotations
 
@@ -31,6 +33,10 @@ LANGUAGES = ("zh", "en", "auto")
 
 class RealtimeASRError(ValueError):
     """User-facing failure; the API layer turns it into a 400 response."""
+
+
+NO_MODEL = ("没有可用的本地语音模型。在项目文件夹运行 ./start.sh models 下载 SenseVoice Small；"
+            "也可以安装 faster-whisper 并缓存模型。本机服务运行时不会自动下载。")
 
 
 # --------------------------------------------------------------------------- #
@@ -409,7 +415,7 @@ class _Session:
         self.segments = []
         self.partial = None
         self.error = None
-        self.received = 0.0          # seconds of audio accepted from the page
+        self.received = 0.0          # seconds of audio accepted from the caller
         self.heard = 0.0             # seconds the worker has segmented
         self.processed = 0.0         # seconds the worker has finished transcribing
         self.ready = asyncio.Event()
@@ -517,7 +523,7 @@ class RealtimeASR:
         if self._fake:
             message = "测试引擎"
         elif not default:
-            message = "没有可用的本地语音模型。请准备 SenseVoice 模型文件，或安装 faster-whisper 并缓存模型；本应用不会自动下载。"
+            message = NO_MODEL
         else:
             message = "本地语音模型已就绪，音频不会离开这台电脑。"
         speaker_model = None if self._fake else _speaker_model_file()
@@ -544,7 +550,7 @@ class RealtimeASR:
                     raise RealtimeASRError("未安装本地转写依赖。请在项目根目录使用 .venv 执行：python -m pip install -r backend/requirements-asr.txt")
                 model_name = choose_model(model)
                 if model_name is None:
-                    raise RealtimeASRError("没有可用的本地语音模型。请准备 SenseVoice 模型文件，或安装 faster-whisper 并缓存模型；本应用不会自动下载。")
+                    raise RealtimeASRError(NO_MODEL)
                 spec = _engine_spec(model_name)
                 speaker_model = _speaker_model_file() if speakers else None
                 if speaker_model:
