@@ -17,7 +17,7 @@
 | **文字记录** | 每次开启单独存成一个文本文件，句数没有上限，不会互相覆盖。可以按小时翻看、搜索、复制、下载。 |
 | **管理录音** | 实时输入时缓存原始音频；结束录音后保存到资料库，复用本机已有音频，只补传缺口并核验完整性。支持播放、转文字、整理纪要、打包导出及设备删除。没有缓存的旧录音首次仍需完整下载。 |
 | **给 Agent 读** | 通过 MCP，Claude Code、Codex 这类 Agent 可以按日期读你保存的文字、搜索、读“刚才说了什么”。只读，不配置就没有。 |
-| **留在本机** | 声音、文字、录音都存在这台电脑上。只有你自己选择用云端模型整理文字，或者让 Agent 来读时，文字才会发出去。 |
+| **留在本机** | 声音、文字、录音都存在这台电脑上。只有你自己选择用云端模型转写或整理，或者让 Agent 来读时，相应的内容才会发出去。 |
 
 ![文字记录：按小时翻看，可以搜索](docs/images/records.png)
 
@@ -79,21 +79,11 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 输入法只能从“声音设备”里选麦克风，所以要先装一块虚拟声卡来转接。一共三步，前两步每台电脑只做一次。
 
-1. **安装专属声卡**。到同仓库的 [Recording Bean Audio 2ch 1.0.1 Release](https://github.com/maple-space/open-recording-bean/releases/tag/audio-v1.0.1) 下载 **`RecordingBeanAudio2ch-1.0.1-release.zip`**，解压后双击 **`安装并启用.command`**。Intel 与 Apple Silicon 使用同一个 Universal 包（macOS 11+），无需选择架构或安装 Xcode。设备名称为 “Recording Bean Audio 2ch”。
+1. **安装专属声卡**（每台电脑一次）。专属声卡 Recording Bean Audio 2ch 是本项目配套的虚拟声卡，已适配 Typeless 的麦克风选择。到同仓库的 [Recording Bean Audio 2ch 1.0.1 Release](https://github.com/maple-space/open-recording-bean/releases/tag/audio-v1.0.1) 下载 **`RecordingBeanAudio2ch-1.0.1-release.zip`**，解压后双击 **`安装并启用.command`**，按提示输入管理员密码。Intel 与 Apple Silicon 使用同一个安装包（macOS 11+），不需要安装 Xcode，通常也不用重启电脑。装好后由 macOS 自动加载，日常不需要打开任何声卡程序。
 
-   网站仍使用上面的 `git clone` + `./start.sh` 启动方式，Release 的 `.pkg` 只安装配套声卡。GitHub 自动生成的 `Source code` 附件是源码，不是已经编译好的安装包。
-
-   需要自行修改或构建声卡的开发者，可在项目根目录运行：
-
-   ```bash
-   python3 tools/recording-bean-audio/build.py
-   ```
-
-   自行构建才需要 Xcode 或带 macOS SDK 的 Command Line Tools。安装入口在本机管理员认证后安装并检测声卡；已加载则直接完成，通常无需重启电脑。未加载时，脚本会询问是否重新加载音频服务（声音会短暂停顿）；若系统拒绝或设备仍未出现，保存工作后重启 macOS，再检查设备列表。详见 [安装与启用](docs/macos-setup.md#2-安装专属声卡)。
-
-   Recording Bean Audio 2ch 是本项目配套的虚拟声卡，已适配 Typeless 的麦克风选择。当前驱动为 ad-hoc 签名，安装包未使用 Developer ID 签名或 Apple 公证；macOS 的开发者验证提示处理方法见安装指南。开发者构建、签名与源码许可见 [配套驱动说明](tools/recording-bean-audio/README.md)。
-
-   网站、后端和配套声卡源码在同一仓库维护、配套发布；声卡需要在每台 Mac 首次单独安装一次，之后由 macOS 自动加载。日常只需运行 `./start.sh` 启动网站，不需要再打开声卡程序。`./start.sh` 不会替你安装系统驱动。已经在传声时更换声卡，先关闭实时输入、刷新网页，选中新设备后再开启；同时把输入法麦克风选为同一个设备。
+   - 声卡没有使用 Apple 开发者证书签名，安装包也没有经过公证，macOS 可能会拦一下。怎么放行、装好后设备没有出现怎么办、以后怎么卸载，见 [macOS 安装与使用指南](docs/macos-setup.md#2-安装专属声卡)。
+   - 这个安装包只装声卡，`./start.sh` 不会替你安装它；网站仍然用上面的 `git clone` + `./start.sh` 启动。Release 页面里 GitHub 自动生成的 `Source code` 是源码，不是安装包。
+   - 想自己修改或构建声卡，见 [专属声卡的构建说明](tools/recording-bean-audio/README.md)。
 
 2. **把输入法的麦克风改成虚拟声卡**。
    - 豆包输入法：设置 → 语音输入 → 麦克风选择 → 选 “Recording Bean Audio 2ch”。
@@ -109,7 +99,7 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 让 Claude Code、Codex、Cursor 这类 Agent 直接读你保存的文字，比如“总结我今天下午说了什么”“上周谁提到过报价”。它是只读的：不能改，不能删，也不会去连录音豆。不配置就等于没有这个功能。
 
-网页左侧的“给 Agent 用”页面里有同样的说明，接入命令已经填好这台电脑上的实际路径，可以直接复制。
+网页左侧的“给 Agent 用”页面里有同样的说明，接入命令已经填好这台电脑上的实际路径，可以直接复制。用 `RECORDING_DATA_DIR` 换过数据文件夹的话，接入时要把同一个值交给 Agent，页面里的命令已经带上了（Claude Code 是在命令里加 `-e RECORDING_DATA_DIR=/你的/文件夹`）。
 
 在 Claude Code 里加一次就行，把路径换成你电脑上项目所在的位置：
 
@@ -146,7 +136,7 @@ Agent 能用六个工具：
 | `list_recordings` | 列出资料库里的录音 |
 | `read_recording` | 读一条录音的文字和总结 |
 
-它直接读 `.local/data` 里的文字记录文件和资料库，本机服务不开也能用。MCP 本身不联网。但 Agent 读到的文字会交给它背后的模型处理，用云端模型的 Agent 就意味着这些文字会发到那个服务。
+它直接读数据文件夹（默认是 `.local/data`）里的文字记录文件和资料库，本机服务不开也能用。MCP 本身不联网。但 Agent 读到的文字会交给它背后的模型处理，用云端模型的 Agent 就意味着这些文字会发到那个服务。
 
 ## 兼容性
 
@@ -154,6 +144,7 @@ Agent 能用六个工具：
 | --- | --- |
 | macOS · Intel（`x86_64`） | 支持，已完成功能验证。 |
 | macOS · Apple Silicon（`arm64`） | 支持，已完成功能验证。 |
+| macOS 版本 | macOS 11 及以上。已在 macOS 15 上完成功能验证；11 到 14 满足各组件的要求，还没有实机验证。 |
 | Recording Bean Audio 2ch | macOS 11+ Universal 驱动，一个安装包同时包含上述两种架构。 |
 | 录音豆 | soundcore Work D3200，固件 04.92。 |
 | 输入法 | 可选择音频输入设备的应用；教程适用于 Typeless 2.11.0、豆包输入法 1.1.0。 |
@@ -168,9 +159,9 @@ Agent 能用六个工具：
 - **模型下载不动**：`HF_ENDPOINT=https://hf-mirror.com ./start.sh models` 指定国内镜像；再次运行会接着上次的进度下载。
 - **开着实时输入时不能下载录音**：实时输入期间蓝牙被它独占，下载、刷新、删除要先关闭实时输入。
 - **连接后从哪里开始实时输入**：设备页点击“进入实时输入”，在下一页开启。折叠区“仅在录音豆上录音”的按钮只控制设备自身录音，声音保存在录音豆里。
-- **新录音何时出现在列表里**：连接或重连时读取一次目录，新录音完成后点击“刷新录音列表”。不再每 12 秒自动读取目录或锁住整页；页面状态自动更新只读取本机缓存。
-- **为什么新录音保存更快**：开启实时输入时，原始音频会同步写入本机缓存。结束后在设备页保存到资料库，只补传开头、断线期间等缺失片段，并核验边界和尾部。中断后再次保存可复用已写入的音频；缓存只属于当前电脑，手机上接收的音频不会自动成为电脑缓存。旧录音首次仍需完整下载。
-- **想换个端口，或者换个地方存数据**：`RECORDING_PORT=9000 ./start.sh` 换端口；`RECORDING_DATA_DIR=/你的/文件夹 ./start.sh` 换数据文件夹。
+- **新录音何时出现在列表里**：连接或重连时读取一次目录，新录音完成后点击“刷新录音列表”。页面不会自己去读录音豆的目录；它定时更新的只是本机服务已有的状态，不发蓝牙指令，也不会锁住按钮。
+- **保存录音为什么有时很快、有时很慢**：开启实时输入时，原始音频会同步写入本机缓存；结束后在设备页保存到资料库时，只补传开头、断线期间等缺失片段，并核验边界和尾部，所以很快。中断后再次保存，会接着已写入的部分继续。没有缓存的录音要经低功耗蓝牙完整下载，比较慢：缓存只属于这台电脑，手机上接收过的音频不算。
+- **想换个端口，或者换个地方存数据**：`RECORDING_PORT=9000 ./start.sh` 换端口；`RECORDING_DATA_DIR=/你的/文件夹 ./start.sh` 换数据文件夹。换了数据文件夹后，给 Agent 用的接入配置也要带上同一个值，见上面的“给 Agent 用（MCP）”。
 
 ## 工作原理
 
@@ -188,19 +179,22 @@ Agent 能用六个工具：
 
 | 位置 | 内容 |
 | --- | --- |
-| `backend/feishu_protocol.py`、`backend/feishu.py` | 录音豆的协议：分包、密钥交换、解密、录音列表、下载、删除 |
-| `backend/feishu_live.py`、`backend/live.py` | 实时传声、送虚拟声卡、文字记录文件 |
+| `backend/feishu_protocol.py`、`backend/feishu.py`、`backend/devices.py` | 录音豆的协议和连接：分包、密钥交换、解密、录音列表、下载、删除 |
+| `backend/feishu_live.py`、`backend/live.py`、`backend/audio_bridge.py` | 实时传声、送虚拟声卡、文字记录文件 |
+| `backend/feishu_cache.py`、`backend/feishu_incremental.py`、`backend/feishu_jobs.py` | 本机音频缓存，保存录音时只补缺口并核验，批量保存和删除 |
 | `backend/realtime_asr.py`、`backend/speakers.py` | 实时识别和区分说话人 |
 | `backend/asr.py`、`backend/providers.py`、`backend/workflows.py` | 录音的转写和整理 |
 | `backend/mcp_server.py`、`backend/text_records.py` | 给 Agent 用的只读接口，读文字记录文件 |
 | `backend/app.py`、`backend/storage.py`、`backend/jobs.py` | 本机服务、资料库、后台任务 |
 | `src/platform/` | 网页（其中 `AgentPage.jsx` 是“给 Agent 用”页面） |
 | `start.sh`、`scripts/` | 安装启动、下载模型、自检 |
+| `third_party/recording-bean-audio/`、`tools/recording-bean-audio/` | 专属声卡的驱动源码，以及构建、检测、安装工具 |
 
 ## 隐私
 
 - 声音和文字都在本机处理。实时文字用的两个模型下载后离线运行。
 - 录音、文字记录、设置都放在项目文件夹的 `.local/` 里，这个文件夹不会被提交到 Git。
+- 实时输入期间，电脑上会留一份解密后的原始音频（`.local/data/feishu-audio-cache/`），用来在保存录音时少传数据。它不会自动删除，把录音移到废纸篓或从录音豆删除以后也还在，清理方法见下面的“已知限制”。
 - 区分说话人只在一次实时输入期间在内存里比较声音，不保存声纹，也不知道是谁。
 - 用“硅基流动 API”“Codex CLI”或“Claude”整理文字时，相应的文字（选 API 转写时还有音频）会发给你选择的那个服务。API Key 只保留在当前网页的内存里，不写入磁盘。
 - 给 Agent 用的 MCP 只有你自己配置以后才会被启动。它只读不写，Agent 读到的文字由它背后的模型处理。
@@ -211,6 +205,7 @@ Agent 能用六个工具：
 - 只在 macOS 上验证过。把录音移到废纸篓、在访达中显示这些功能依赖 macOS。
 - 录音豆同一时间只能连一个设备：电脑连着的时候，手机上的 App 连不上它。
 - 实时输入期间录音豆一直在录音，录音同时存在录音豆里，每小时约 29 MB，用完可以在“录音豆”页面删除。
+- 电脑上的音频缓存只增不减：每开一小时实时输入约占 37 MB，放在 `.local/data/feishu-audio-cache/`。目前没有自动清理，也没有清理按钮。不需要时，先关闭实时输入并等保存任务结束，再把这个文件夹移到废纸篓；之后保存还没入库的录音，要从录音豆完整下载。
 - 区分说话人的弱点：两个人紧挨着说话时，可能被切进同一句；一个新出现的人如果先说了一两个字的短句，这个短句会被算给前一个人。
 - 录音豆到电脑走的是低功耗蓝牙，下载长录音比较慢，需要耐心。本项目还没有实现 Wi‑Fi 传输。
 - 不做固件升级、解绑、恢复出厂这类操作，也不会去试探没有验证过的指令。固件更新后协议可能变化，功能随时可能失效。
@@ -262,7 +257,7 @@ This is an unofficial, independent open-source project. It is not connected with
 - **Text records.** Every session is saved as its own text file, with no limit on length, to browse by the hour, search, copy and download.
 - **Recordings.** Raw audio is cached during live input. Once recording ends, saving to the library reuses this computer's cached audio, retrieves missing intervals, and verifies completeness. Recordings can be played, transcribed, summarised, exported and deleted. Older recordings without a local cache still need a full first download; audio cached on a phone is not automatically available on this computer.
 - **For agents.** Through MCP, agents such as Claude Code or Codex can read the saved text by day, search it and read the last few minutes. Read-only, and absent unless you set it up.
-- **Kept on your computer.** Sound, text and recordings stay on this computer. Text leaves it only when you choose a cloud model to tidy it up, or let an agent read it.
+- **Kept on your computer.** Sound, text and recordings stay on this computer. Something leaves it only when you choose a cloud model to transcribe or tidy up a recording, or let an agent read the text.
 
 ```bash
 git clone https://github.com/maple-space/open-recording-bean.git
@@ -272,13 +267,11 @@ cd open-recording-bean
 
 Requires macOS, Node.js 22.12+ (or 20.x at 20.19+) and Python 3.10 to 3.13; uv can prepare Python if needed. First run installs application dependencies and downloads/verifies approximately 270 MB of speech and speaker models. No API key or model-path configuration is needed. See the [first-run guide](docs/first-run.md).
 
-Intel (`x86_64`) and Apple Silicon (`arm64`) are supported and functionally verified. The companion audio driver is a Universal build for macOS 11 or later; the website also requires an OS supported by the Node.js and Python versions above. Recorder support covers soundcore Work D3200 with firmware 04.92. Windows, Linux and other firmware versions are outside the verified support scope. The interface is in Simplified Chinese.
+Intel (`x86_64`) and Apple Silicon (`arm64`) are supported and functionally verified. macOS 11 or later is required: everything has been verified on macOS 15, while macOS 11 to 14 meet the requirements of every component but have not been tested on a real machine. The companion audio driver is a Universal build for macOS 11 or later. Recorder support covers soundcore Work D3200 with firmware 04.92. Windows, Linux and other firmware versions are outside the verified support scope. The interface is in Simplified Chinese.
 
 No built-in microphone is required: the recorder captures speech, the website sends it to Recording Bean Audio 2ch, and Typeless reads the same device as its microphone. Install the companion driver once, then select it in both apps. See the [macOS setup guide](docs/macos-setup.md).
 
-After connecting, choose **进入实时输入** to open realtime input. The separate, collapsed **仅在录音豆上录音** section controls recordings stored on the recorder itself. The recording list loads on connection/reconnection; use **刷新录音列表** after finishing a new recording. Periodic page updates read cached service state only and no longer submit Bluetooth directory jobs every 12 seconds.
-
-Download **`RecordingBeanAudio2ch-1.0.1-release.zip`** from the [companion driver release](https://github.com/maple-space/open-recording-bean/releases/tag/audio-v1.0.1), extract it and run `安装并启用.command`. One Universal installer covers Intel and Apple Silicon; end users do not need Xcode. The installer installs only the audio driver. Run the website from the cloned source with `./start.sh`; GitHub's generated “Source code” assets are not compiled installers. Current driver builds are ad-hoc signed and the installer is not notarized. Maintainer release steps are documented in [docs/releasing.md](docs/releasing.md).
+Download **`RecordingBeanAudio2ch-1.0.1-release.zip`** from the [companion driver release](https://github.com/maple-space/open-recording-bean/releases/tag/audio-v1.0.1), extract it and run `安装并启用.command`. One Universal installer covers Intel and Apple Silicon; end users do not need Xcode. The installer installs only the audio driver. Run the website from the cloned source with `./start.sh`; GitHub's generated “Source code” assets are not compiled installers. Current driver builds are ad-hoc signed and the installer is not notarized; what to do when macOS blocks it, and how to remove the driver again, is in the [macOS setup guide](docs/macos-setup.md) (in Chinese). Maintainer release steps are documented in [docs/releasing.md](docs/releasing.md).
 
 A reboot is usually unnecessary. If the driver is not detected, the helper asks before reloading the audio service. If macOS refuses the reload or the device remains unavailable, save your work and restart macOS, then check the device list again.
 
@@ -286,7 +279,7 @@ A reboot is usually unnecessary. If the driver is not detected, the helper asks 
 
 Agents such as Claude Code, Codex or Cursor can read the text you have saved: “summarise what I said this afternoon”, “who mentioned the quote last week”. It is read-only: it cannot change or delete anything and never connects to the recorder. Unless you set it up, it does not exist.
 
-The “给 Agent 用” page of the web interface has the same instructions, with the path of your own install already filled in, ready to copy.
+The “给 Agent 用” page of the web interface has the same instructions, with the path of your own install already filled in, ready to copy. If the data folder was moved with `RECORDING_DATA_DIR`, the agent needs the same variable; the page adds it for you.
 
 ```bash
 claude mcp add --scope user open-recording-bean -- /path/to/open-recording-bean/start.sh mcp
@@ -319,7 +312,39 @@ For other clients (Claude Desktop, Cursor and so on), in their MCP configuration
 | `list_recordings` | The recordings in the library |
 | `read_recording` | The text and summary of one recording |
 
-It reads the text record files and the library in `.local/data` directly, so it works without the local service running. The MCP itself sends nothing anywhere. What an agent reads is handled by the model behind it, so with a cloud model that text goes to that service.
+It reads the text record files and the library in the data folder (`.local/data` by default) directly, so it works without the local service running. The MCP itself sends nothing anywhere. What an agent reads is handled by the model behind it, so with a cloud model that text goes to that service.
+
+### Common questions
+
+- **The recorder is not found.** It connects to one device at a time. Quit the Feishu or soundcore app on the phone (or switch off the phone's Bluetooth), take the recorder out of its case or press its button, and search again.
+- **Nothing happens on the first search.** macOS asks whether Terminal may use Bluetooth; choose Allow. If it was refused, switch Terminal on under System Settings → Privacy & Security → Bluetooth.
+- **The level bar on the page moves but the input method shows no text.** The input method's microphone is not set to the virtual sound card.
+- **The model download stalls.** `HF_ENDPOINT=https://hf-mirror.com ./start.sh models` uses a mirror; running it again continues where it stopped.
+- **Recordings cannot be downloaded while realtime input is on.** Realtime input owns the Bluetooth link. Switch it off before downloading, refreshing or deleting.
+- **Where realtime input starts after connecting.** Choose **进入实时输入** on the recorder page and switch it on there. The collapsed **仅在录音豆上录音** section only controls recording on the recorder itself, where the sound stays.
+- **When a new recording appears in the list.** The list is read on connection and reconnection; use **刷新录音列表** after finishing a recording. The page does not read the recorder's directory by itself: its periodic updates only fetch state the local service already has, and send no Bluetooth commands.
+- **Why saving is sometimes quick and sometimes slow.** What was recorded with realtime input on is already cached on this computer, so only the missing stretches are fetched and checked. A recording without a cache (audio received on a phone does not count) is downloaded in full over Bluetooth Low Energy, which is slow.
+- **Another port or data folder.** `RECORDING_PORT=9000 ./start.sh` changes the port; `RECORDING_DATA_DIR=/your/folder ./start.sh` changes the data folder. With another data folder, the agent's MCP entry needs the same variable.
+
+### Privacy
+
+- Sound and text are processed on this computer. The two models for live text run offline once downloaded.
+- Recordings, text records and settings are kept in the project's `.local/` folder, which Git ignores.
+- While realtime input is on, a decrypted copy of the raw audio is kept on this computer (`.local/data/feishu-audio-cache/`), so that saving a recording later transfers less. It is not removed automatically, also not when a recording is moved to the Trash or deleted from the recorder; “Known limitations” below says how to clear it.
+- Speakers are told apart only by comparing voices in memory during one realtime session. No voiceprint is stored and nobody is identified.
+- When you tidy up text with the SiliconFlow API, Codex CLI or Claude, that text (and the audio, if you choose API transcription) is sent to the service you chose. The API key stays in the page's memory and is never written to disk.
+- The MCP for agents runs only after you set it up. It is read-only, and what an agent reads is handled by the model behind it.
+- The project collects no usage data.
+
+### Known limitations
+
+- Verified on macOS only. Moving recordings to the Trash and showing files in Finder depend on macOS.
+- The recorder connects to one device at a time: while the computer holds it, the phone app cannot connect.
+- While realtime input is on, the recorder keeps recording to its own storage, about 29 MB an hour. Delete what you no longer need on the recorder page.
+- The audio cache on the computer only grows: about 37 MB for every hour of realtime input, in `.local/data/feishu-audio-cache/`. There is no automatic clean-up and no button for it yet. To clear it, switch realtime input off, wait for any save to finish, and move that folder to the Trash; recordings not yet saved to the library are then downloaded in full from the recorder.
+- Speaker labels have weak spots: two people speaking right after one another may end up in one sentence, and a new speaker's first one- or two-word sentence is given to the previous speaker.
+- The recorder talks to the computer over Bluetooth Low Energy, so downloading long recordings is slow. Wi‑Fi transfer is not implemented.
+- No firmware updates, unbinding or factory resets, and no probing of commands that have not been verified. A firmware update may change the protocol and break things at any time.
 
 ### Sources and thanks
 

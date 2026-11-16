@@ -34,6 +34,14 @@ python3 tools/recording-bean-audio/build.py
 
 升级或更换声卡后，请在网站与输入法中各选择一次 **Recording Bean Audio 2ch**。
 
+## 卸载
+
+1. 关闭网站的实时输入，把输入法或会议软件的麦克风改回原来的设备。
+2. 把 `/Library/Audio/Plug-Ins/HAL/RecordingBeanAudio2ch.driver` 移到废纸篓：在访达里用“前往 → 前往文件夹…”打开这个位置，移动时需要管理员认证。
+3. 重启 macOS。之后设备列表里不再有 **Recording Bean Audio 2ch**。
+
+卸载只移除这一个驱动，不影响其他声卡。
+
 ## 用自己的证书签名与公证
 
 已有自己的 Apple Developer ID Application、Developer ID Installer 证书时：

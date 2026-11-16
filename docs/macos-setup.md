@@ -1,6 +1,6 @@
 # macOS 安装与使用指南
 
-适用于 Intel 与 Apple Silicon。声音由录音豆采集，无需电脑内置麦克风；Recording Bean Audio 2ch 将网站收到的声音提供给输入法或会议软件。
+适用于 macOS 11 及以上的 Intel 与 Apple Silicon 电脑，已在 macOS 15 上完成功能验证。声音由录音豆采集，无需电脑内置麦克风；Recording Bean Audio 2ch 将网站收到的声音提供给输入法或会议软件。
 
 ```text
 录音豆 → 蓝牙 → 本机服务
@@ -37,6 +37,16 @@ cd open-recording-bean
 **签名状态：** 当前驱动为 ad-hoc 签名，安装包未使用 Developer ID 签名或 Apple 公证。如果 macOS 因无法验证开发者而阻止打开，确认来源为本仓库 Release 后，按 [Apple 的打开应用说明](https://support.apple.com/zh-cn/102445)，在“系统设置 → 隐私与安全性”中查看“仍要打开”选项。文件损坏或恶意软件提示应另行排查，不关闭 Gatekeeper 或 SIP。
 
 Release 的安装包只包含声卡。网站通过源码运行，模型由首次启动下载；GitHub 自动生成的 `Source code` 附件是对应标签的源码快照。
+
+### 卸载声卡
+
+不再使用时，可以把它从系统里移除：
+
+1. 在网页上关闭实时输入，把输入法和会议软件的麦克风改回原来的设备。
+2. 在访达的菜单里选“前往 → 前往文件夹…”，输入 `/Library/Audio/Plug-Ins/HAL/`，把里面的 `RecordingBeanAudio2ch.driver` 移到废纸篓，按提示输入管理员密码。
+3. 重启 macOS。重启前它可能还留在设备列表里；重启后“系统设置 → 声音”里没有 **Recording Bean Audio 2ch**，就是卸载完成了。
+
+卸载只移除声卡，网站、模型以及已保存的录音和文字都不受影响。以后想再用，重新运行安装入口即可。
 
 ## 3. 启动网站并连接录音豆
 
