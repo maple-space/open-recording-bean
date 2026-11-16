@@ -45,6 +45,7 @@ export default function PortalApp() {
   const [apiKey, setApiKey] = useState('')
   const [apiModels, setApiModels] = useState({ summary: 'Qwen/Qwen3-8B', asr: 'FunAudioLLM/SenseVoiceSmall' })
   const [busy, setBusy] = useState('')
+  const [disconnecting, setDisconnecting] = useState(false)
   const [apiTask, setApiTask] = useState(null)
   const [notice, setNotice] = useState(null)
   const [deviceRecordId, setDeviceRecordId] = useState(null)
@@ -54,6 +55,7 @@ export default function PortalApp() {
   const recordsRef = useRef(records)
   recordsRef.current = records
   const busyRef = useRef(false)
+  const disconnectingRef = useRef(false)
   const pollRef = useRef(false)
   const mounted = useRef(true)
   const settingsLoaded = useRef(false)
@@ -154,6 +156,7 @@ export default function PortalApp() {
       if (!mounted.current) return null
       updateJob(job)
     }
+    for (const record of job.result?.records || []) upsertRecord(record)
     if (job.status === 'failed') throw jobFailure(job)
     if (job.status === 'cancelled') throw new Error('任务已取消。')
     if (job.result?.record) upsertRecord(job.result.record)
@@ -197,6 +200,26 @@ export default function PortalApp() {
     })
   }
 
+  async function disconnectDevice() {
+    if (disconnectingRef.current) return
+    if (deviceRef.current.live) {
+      showError(new Error('请先关闭实时输入，再断开录音豆。'))
+      return
+    }
+    disconnectingRef.current = true
+    setDisconnecting(true)
+    try {
+      const snapshot = await api('/api/devices/feishu/disconnect', { method: 'POST' })
+      setDevice(snapshot)
+      setNotice({ type: 'info', text: '录音豆已断开。已保存的音频保留，重新连接后可继续同步。' })
+    } catch (error) { showError(error) }
+    finally {
+      disconnectingRef.current = false
+      setDisconnecting(false)
+      refresh()
+    }
+  }
+
   function scanDevices() {
     return run('搜索附近的录音豆', async () => {
       const result = await submitJob({ type: 'scan', device_type: KIND })
@@ -221,13 +244,22 @@ export default function PortalApp() {
 
   function downloadFiles(files) {
     const deviceId = deviceRef.current?.device_id
-    return run('下载录音到本机', async () => {
+    return run('同步录音到本机', async () => {
       const result = await submitJob({ action: 'download', device_id: deviceId, ids: files.map((file) => String(file.original_id)) }, '/api/devices/feishu/actions')
       for (const record of result?.records || []) upsertRecord(record)
       const lastRecord = result?.record
       if (lastRecord) setDeviceRecordId(lastRecord.id)
-      setNotice({ type: 'success', text: `${files.length} 条录音已保存在本机资料库。`, recordId: lastRecord?.id })
+      setNotice({ type: 'success', text: `${result?.count || 0} 条录音已核验并保存在本机资料库${result?.skipped_ids?.length ? `，其中 ${result.skipped_ids.length} 条复用已有归档` : ''}；设备原件已保留。`, recordId: lastRecord?.id })
       return lastRecord
+    })
+  }
+
+  function resumeDownload(id) {
+    return run('继续同步录音', async () => {
+      const result = await submitJob(undefined, `/api/jobs/${encodeURIComponent(id)}/resume`)
+      if (result?.record) setDeviceRecordId(result.record.id)
+      setNotice({ type: 'success', text: `${result?.count || 0} 条录音已核验并保存在本机资料库；设备原件已保留。`, recordId: result?.record?.id })
+      return result
     })
   }
 
@@ -440,9 +472,9 @@ export default function PortalApp() {
         {recordsRoute && <LiveRecords name={recordName} navigate={navigate} />}
         {route === '/agent' && <AgentPage records={records} />}
         {onDevicePage && device.live && <div className="p-notice" role="status"><span>实时输入正在进行，录音豆的蓝牙由它独占。刷新、下载、删除和录音控制要先关闭实时输入。</span><Link href="/live" navigate={navigate} className="text-link">去实时输入 <ArrowRight size={14} /></Link></div>}
-        {onDevicePage && <DevicePanel snapshot={device} browserState={browserState} records={records} scans={scans} busy={busy || (activeDeviceJobs ? 'device-job' : '') || (device.live ? 'live-input' : '')} online={online} navigate={navigate} onConnect={connectDevice} onScan={scanDevices}
+        {onDevicePage && <DevicePanel snapshot={device} browserState={browserState} records={records} scans={scans} busy={busy || (disconnecting ? 'disconnecting' : '') || (activeDeviceJobs ? 'device-job' : '') || (device.live ? 'live-input' : '')} disconnecting={disconnecting} online={online} navigate={navigate} onConnect={connectDevice} onScan={scanDevices}
           onRefresh={() => run('刷新录音列表', () => submitJob({ type: 'refresh', device_type: KIND }))}
-          onDisconnect={() => run('断开录音豆', () => api('/api/devices/feishu/disconnect', { method: 'POST' }))}
+          onDisconnect={disconnectDevice}
           onDownload={downloadFiles}
           onRecord={(action) => run(action === 'pause' ? '暂停设备录音' : '开始设备录音', () => submitJob({ action, device_id: deviceRef.current.device_id }, '/api/devices/feishu/actions'))}
           onOpenLibrary={openRecord} onOpenFile={openDeviceFile} onProcessFiles={processDeviceFiles} onExportFiles={exportDeviceFiles} onDeleteFiles={requestDeviceDelete} settings={settings} selectedRecordId={selectedDeviceRecord?.id}
@@ -450,7 +482,7 @@ export default function PortalApp() {
         {route === '/library' && <RecordWorkspace records={records} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); window.history.replaceState({}, '', `/library?record=${encodeURIComponent(id)}`) }} settings={settings} apiKey={apiKey} busy={busy || (activeRecordJobs ? 'record-job' : '')} lockedField={apiTask?.recordId === selectedId ? apiTask.field : null} online={online} onImport={importFile} onSave={saveRecord} onTranscribe={transcribe} onSummarize={summarize} onProcess={processRecord} onExport={exportRecords} onTrash={requestTrash} onRegisterFlush={registerEditor} onError={showError} />}
         {route === '/settings' && <PlatformSettings settings={settings} apiKey={apiKey} onKeyChange={setApiKey} onSave={(value) => run('保存模式设置', async () => { const result = await api('/api/settings', { method: 'PATCH', body: value }); setSettings(result); setNotice({ type: 'success', text: '模式设置已保存到本机。' }); return result })} online={online} busy={busy} health={health} apiModels={apiModels} onApiModels={setApiModels} />}
         {!pages.includes(route) && !recordsRoute && <div className="p-empty"><h1>没有这个页面</h1><Link href="/" navigate={navigate} className="p-button">返回首页</Link></div>}
-        <JobPanel jobs={jobs} busy={busy} onCancel={async (id) => { try { const job = await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }); updateJob(job); refresh() } catch (error) { showError(error) } }} />
+        <JobPanel jobs={jobs} busy={busy || (disconnecting ? 'disconnecting' : '')} device={device} online={online} onResume={resumeDownload} onCancel={async (id) => { try { const job = await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }); updateJob(job); refresh() } catch (error) { showError(error) } }} />
       </div>
       {deleteRequest && <ConfirmDialog key={`${deleteRequest.type}-${deleteRequest.deviceId || ''}-${(deleteRequest.files || deleteRequest.records).map((item) => item.original_id || item.id).join('-')}`} request={deleteRequest} busy={!!busy} onCancel={() => setDeleteRequest(null)} onConfirm={confirmDelete} />}
       <footer className="portal-footer">{project.name} · 非官方开源项目，与安克、soundcore、飞书没有关联 · 声音和文字留在本机</footer>

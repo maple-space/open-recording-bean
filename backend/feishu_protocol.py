@@ -1,4 +1,5 @@
 """D3200 wire, crypto and audio primitives; no Bluetooth and no logging here."""
+import binascii
 import hmac
 import struct
 from itertools import islice
@@ -124,24 +125,21 @@ class DeviceCrypto:
         return plain[14:46], p[8:20], size
 
 
-def _crc_entry(value):
-    crc = value << 24
-    for _ in range(8):
-        crc = ((crc << 1) ^ (0x04c11db7 if crc & 0x80000000 else 0)) & 0xffffffff
-    return crc
+_REVERSED_BITS = bytes(int(f'{value:08b}'[::-1], 2) for value in range(256))
 
 
-_CRC_TABLE = tuple(_crc_entry(value) for value in range(256))
+def _ogg_crc(data):
+    # Ogg uses the non-reflected CRC-32 with zero initial/final XOR. Reflect
+    # bytes and undo binascii's XORs, then reflect its result back to Ogg order.
+    crc = binascii.crc32(data.translate(_REVERSED_BITS), 0xffffffff) ^ 0xffffffff
+    return int.from_bytes(crc.to_bytes(4, 'little').translate(_REVERSED_BITS), 'big')
 
 
 def _ogg_page(packets, sequence, granule, flags=0):
     segments = bytes(len(p) for p in packets)  # D3200 fixed frames <= 160 bytes.
     header = b'OggS' + bytes([0, flags]) + struct.pack('<QIII', granule, 0x41524b52, sequence, 0) + bytes([len(segments)]) + segments
     page = bytearray(header + b''.join(packets))
-    crc = 0
-    for byte in page:
-        crc = ((crc << 8) & 0xffffffff) ^ _CRC_TABLE[(crc >> 24) ^ byte]
-    struct.pack_into('<I', page, 22, crc)
+    struct.pack_into('<I', page, 22, _ogg_crc(page))
     return page
 
 

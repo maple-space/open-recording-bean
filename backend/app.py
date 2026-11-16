@@ -265,6 +265,11 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
     @app.post('/api/devices/{kind}/disconnect')
     async def disconnect(kind: str):
         kind = device_kind(kind)
+        # Stop an active transfer before waiting for the batch lock. Keep that
+        # lock for the actual disconnect so a newly queued job cannot pass it.
+        request_stop = getattr(getattr(devices, kind, None), 'request_disconnect', None)
+        if request_stop:
+            request_stop()
         async with device_locks[kind]:
             return await devices.disconnect(kind)
 
@@ -359,6 +364,8 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
                     'device_id': download_device_id,
                     'provider': settings['provider'] if record else None,
                     'model': settings.get(settings['provider'] + '_model', '') if record else None}.items() if value is not None}
+        if body.type == 'download' and body.device_type == 'feishu':
+            metadata['retry_request'] = dict(device_id=download_device_id, ids=[body.original_id])
         return manager.submit(body.type, work, metadata)
 
     @app.get('/{requested:path}')

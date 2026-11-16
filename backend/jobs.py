@@ -5,6 +5,13 @@ import uuid
 from .storage import now
 
 
+class JobFailed(ValueError):
+    """A failed batch can still have successfully archived results."""
+    def __init__(self, message, result):
+        super().__init__(message)
+        self.result = result
+
+
 class JobManager:
     def __init__(self, storage):
         self.storage = storage
@@ -20,7 +27,9 @@ class JobManager:
         self.storage.save_job(job)
         async def progress(value):
             details = value if isinstance(value, dict) else {'message': str(value)}
-            job.update({key: details[key] for key in ('message', 'progress', 'stage') if key in details})
+            fields = ('message', 'progress', 'stage', 'total', 'current_index', 'current_id',
+                      'file_progress', 'completed_count', 'completed_ids', 'failed_items')
+            job.update({key: details[key] for key in fields if key in details})
             self.storage.save_job(job)
         async def run():
             try:
@@ -31,6 +40,8 @@ class JobManager:
             except asyncio.CancelledError:
                 job.update(status='cancelled', message='已取消')
             except Exception as error:
+                if isinstance(error, JobFailed):
+                    job['result'] = error.result
                 job.update(status='failed', error=str(error)[:2000] or type(error).__name__, message='处理失败')
             finally:
                 job['finished_at'] = now()

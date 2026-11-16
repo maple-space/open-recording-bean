@@ -10,7 +10,7 @@ export function HardwareMark({ large = false }) {
   return <div className={`hardware-mark ${large ? 'large' : ''}`} aria-hidden="true"><img src="/assets/recorder.svg" alt="" /></div>
 }
 
-export function DevicePanel({ snapshot, browserState, records, scans, busy, online, navigate, onConnect, onScan, onRefresh, onDisconnect, onDownload, onRecord, onOpenFile, onProcessFiles, onExportFiles, onDeleteFiles, settings, selectedRecordId, editor }) {
+export function DevicePanel({ snapshot, browserState, records, scans, busy, disconnecting, online, navigate, onConnect, onScan, onRefresh, onDisconnect, onDownload, onRecord, onOpenFile, onProcessFiles, onExportFiles, onDeleteFiles, settings, selectedRecordId, editor }) {
   const [selected, setSelected] = useState(new Set())
   const [query, setQuery] = useState('')
   const [address, setAddress] = useState('')
@@ -20,6 +20,7 @@ export function DevicePanel({ snapshot, browserState, records, scans, busy, onli
   const selectedFiles = files.filter((file) => selected.has(file.original_id))
   const archived = (file) => matchingArchive(records, KIND, snapshot?.device_id, file.original_id)
   const disableConnect = Boolean(busy) || !online
+  const disableDisconnect = Boolean(disconnecting) || !online || Boolean(snapshot?.live)
   const info = snapshot?.info || {}
   const battery = info.battery
   const freeBytes = info.freeMemoryKb != null ? info.freeMemoryKb * 1024 : null
@@ -43,10 +44,10 @@ export function DevicePanel({ snapshot, browserState, records, scans, busy, onli
     <section className="device-controls">
       <div className="button-row">
         {connected ? <>
-          <button className="p-button quiet" disabled={!!busy || !online} onClick={onDisconnect}><Unplug size={15} />断开连接</button>
+          <button className="p-button quiet" disabled={disableDisconnect} onClick={onDisconnect}><Unplug size={15} />断开连接{disconnecting ? '中…' : ''}</button>
         </> : <>
           <button className="p-button primary" disabled={disableConnect} onClick={onScan}><Search size={16} />搜索附近的录音豆</button>
-          {snapshot?.desired_connected && <button className="p-button quiet" disabled={!!busy || !online} onClick={onDisconnect}><Unplug size={15} />停止重连</button>}
+          {snapshot?.desired_connected && <button className="p-button quiet" disabled={disableDisconnect} onClick={onDisconnect}><Unplug size={15} />停止重连{disconnecting ? '中…' : ''}</button>}
         </>}
       </div>
       <p className="hint">录音豆同一时间只能连一个设备。要让手机上的 App（飞书或 soundcore）接回它，请先在这里点“断开连接”。本机服务退出或电脑休眠时连接也会中断。</p>
@@ -68,6 +69,7 @@ export function DevicePanel({ snapshot, browserState, records, scans, busy, onli
       <button className="p-button quiet" disabled={!!busy || !online} onClick={() => onRecord(browserState.recordStatus === 1 ? 'pause' : 'start')}>{browserState.recordStatus === 1 ? <Pause size={15} /> : <Radio size={15} />}{browserState.recordStatus === 1 ? '暂停设备录音' : browserState.recordStatus === 2 ? '继续设备录音' : '开始设备录音'}</button>
     </details>}
     <section className="device-file-panel">
+      <div className="device-next-step"><div><h2>把全部录音同步到本机资料库</h2><p>保留设备原件，不自动转写。已归档录音核验后跳过，中断后可继续同步。</p></div><button className="p-button primary" disabled={!connected || !online || !!busy || !files.length} onClick={() => onDownload(files)}><Download size={16} />同步全部录音{files.length ? `（${files.length}）` : ''}</button></div>
       <div className="panel-heading"><div><h2>录音豆里的录音 <span>{files.length}</span></h2><p>点击录音即可在本页播放、转录和总结。首次读取会归档到本机。</p></div><div className="button-row"><button className="p-button" disabled={!connected || !online || !!busy || !selectedFiles.length} onClick={() => onDownload(selectedFiles)}><Download size={15} />保存所选到资料库{selectedFiles.length > 0 ? ` (${selectedFiles.length})` : ''}</button><button className="p-button danger" disabled={!connected || !online || !!busy || !selectedFiles.length} onClick={() => onDeleteFiles(selectedFiles)} title="选择先备份再删除，或输入确认文字后不备份直接删除"><Trash2 size={15} />删除设备录音</button></div></div>
       <div className="device-directory-refresh"><button className="p-button" disabled={!connected || !!busy || !online} onClick={onRefresh}><RefreshCw size={15} />刷新录音列表</button><p className="hint">连接时读取一次列表。录完后点击刷新；先结束录音并关闭实时输入，再保存到资料库，本机已缓存的音频只补传缺失部分。</p></div>
       <div className="device-agent-bar"><button className="p-button primary" disabled={!canProcessSelected || !online || !!busy} onClick={() => onProcessFiles(selectedFiles)}><Sparkles size={15} />转录并交给 Agent 整理{selectedFiles.length ? `（${selectedFiles.length}）` : ''}</button><button className="p-button" disabled={!canProcessSelected || !online || !!busy} onClick={() => onExportFiles(selectedFiles)}><Download size={15} />导出所选资料包</button><span>当前：{providerName} · 已有转录会直接用于总结</span></div>

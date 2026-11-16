@@ -116,3 +116,290 @@ async def test_batch_backup_reserves_existing_local_audio_against_trash(tmp_path
         await client.post('/api/jobs/' + response.json()['id'] + '/cancel')
         assert app.state.jobs.get(response.json()['id'])['status'] == 'cancelled'
         assert not devices.deleted
+
+
+class BatchDevices(Devices):
+    def __init__(self):
+        super().__init__()
+        self.desired = True
+        self.device_id = 'bean-a'
+        self.session_id = 'session-a'
+        self.ids = ['123', '124', '125']
+        self.downloaded = []
+        self.failures = set()
+        self.release.set()
+
+    def snapshot(self, kind='feishu'):
+        return dict(connected=self.connected, device_id=self.device_id,
+                    session_id=self.session_id, desired_connected=self.desired,
+                    files=[dict(original_id=ident, title=ident, size_bytes=160) for ident in self.ids])
+
+    async def download(self, kind, original_id, work_dir, progress=None):
+        self.downloaded.append(original_id)
+        if progress:
+            await progress(dict(message='读取中', progress=37, stage='download', raw_audio=b'private'))
+        if original_id in self.failures:
+            raise ValueError('完整性冲突')
+        return await super().download(kind, original_id, work_dir, progress)
+
+
+async def submit_batch(app, client, **overrides):
+    body = dict(action='download', device_id='bean-a', ids=['123', '124', '125'])
+    response = await client.post('/api/devices/feishu/actions', json={**body, **overrides})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@pytest.mark.asyncio
+async def test_batch_continues_after_one_bad_file_and_persists_retry_request(tmp_path):
+    devices = BatchDevices()
+    devices.failures.add('124')
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client)
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        job = app.state.jobs.get(submitted['id'])
+        assert devices.downloaded == ['123', '124', '125']
+        assert job['status'] == 'failed'
+        assert job['retry_request'] == dict(device_id='bean-a', ids=devices.ids)
+        assert job['completed_ids'] == ['123', '125']
+        assert job['failed_items'] == [dict(original_id='124', error='完整性冲突')]
+        assert job['result']['count'] == 2
+        assert job['result']['failed_items'] == job['failed_items']
+        assert len(app.state.storage.records()) == 2
+        assert all(not record['transcript'] for record in app.state.storage.records())
+        assert not devices.deleted
+
+
+@pytest.mark.asyncio
+async def test_resume_after_restart_skips_verified_archives_and_retries_failed_files(tmp_path):
+    devices = BatchDevices()
+    devices.failures.add('124')
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client)
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+    devices.failures.clear()
+    devices.downloaded.clear()
+    restarted = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=restarted), base_url='http://127.0.0.1') as client:
+        response = await client.post(f'/api/jobs/{submitted["id"]}/resume')
+        assert response.status_code == 200, response.text
+        resumed = response.json()
+        assert resumed['resumed_from'] == submitted['id']
+        await asyncio.gather(*list(restarted.state.jobs.tasks.values()))
+        job = restarted.state.jobs.get(resumed['id'])
+        assert job['status'] == 'completed', job
+        assert devices.downloaded == ['124']
+        assert job['completed_count'] == job['total'] == 3
+        assert job['result']['skipped_ids'] == ['123', '125']
+
+
+@pytest.mark.asyncio
+async def test_same_device_new_session_between_files_keeps_downloading(tmp_path):
+    class Reconnecting(BatchDevices):
+        async def download(self, *args, **kwargs):
+            result = await super().download(*args, **kwargs)
+            self.session_id = 'session-reconnected'
+            return result
+    devices = Reconnecting()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client)
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        assert app.state.jobs.get(submitted['id'])['status'] == 'completed'
+        assert devices.downloaded == devices.ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['restore', 'cancel', 'disconnect', 'switch'])
+async def test_batch_waits_between_files_but_stops_on_user_intent(tmp_path, outcome):
+    class Disconnecting(BatchDevices):
+        async def download(self, *args, **kwargs):
+            result = await super().download(*args, **kwargs)
+            if len(self.downloaded) == 1:
+                self.connected = False
+            return result
+    devices = Disconnecting()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client)
+        jid = submitted['id']
+        async def waiting():
+            while app.state.jobs.get(jid).get('stage') != 'reconnecting':
+                if app.state.jobs.get(jid)['status'] in ('failed', 'completed'):
+                    pytest.fail(f'batch terminated before waiting: {app.state.jobs.get(jid)}')
+                await asyncio.sleep(.01)
+        await asyncio.wait_for(waiting(), 2)
+        assert devices.downloaded == ['123']
+        assert app.state.jobs.get(jid)['completed_ids'] == ['123']
+        if outcome == 'cancel':
+            await app.state.jobs.cancel(jid)
+        elif outcome == 'disconnect':
+            devices.desired = False
+        else:
+            devices.device_id = 'bean-b' if outcome == 'switch' else 'bean-a'
+            devices.session_id = 'session-new'
+            devices.connected = True
+        await asyncio.wait_for(asyncio.gather(*list(app.state.jobs.tasks.values())), 3)
+        job = app.state.jobs.get(jid)
+        assert job['status'] == ('completed' if outcome == 'restore' else 'cancelled' if outcome == 'cancel' else 'failed')
+        assert devices.downloaded == (devices.ids if outcome == 'restore' else ['123'])
+        assert not devices.deleted
+
+
+@pytest.mark.asyncio
+async def test_corrupt_existing_archive_is_not_skipped_or_overwritten(tmp_path):
+    devices = BatchDevices()
+    app = create_app(tmp_path, devices=devices)
+    source = tmp_path / 'original.ogg'
+    source.write_bytes(b'OggS original')
+    saved = app.state.storage.import_audio(source, device_type='feishu', device_id='bean-a', original_id='123')
+    audio = app.state.storage.audio_path(saved['id'])
+    audio.write_bytes(b'OggS')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client)
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        job = app.state.jobs.get(submitted['id'])
+        assert job['status'] == 'failed'
+        assert devices.downloaded == ['124', '125']
+        assert job['failed_items'][0]['original_id'] == '123'
+        assert audio.read_bytes() == b'OggS'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('kind', 'status'), [('device_delete', 'failed'), ('record_start', 'failed'),
+    ('record_pause', 'cancelled'), ('download', 'completed'), ('download', 'running')])
+async def test_resume_never_replays_other_actions_or_live_or_completed_jobs(tmp_path, kind, status):
+    devices = BatchDevices()
+    app = create_app(tmp_path, devices=devices)
+    app.state.storage.save_job(dict(id='old', type=kind, status=status, created_at='', device_type='feishu',
+        retry_request=dict(device_id='bean-a', ids=['123'])))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        response = await client.post('/api/jobs/old/resume')
+        assert response.status_code == 409, response.text
+        assert not devices.downloaded
+        assert not devices.deleted
+
+
+@pytest.mark.asyncio
+async def test_backup_delete_still_rejects_same_device_new_session(tmp_path):
+    class NewSession(BatchDevices):
+        async def download(self, *args, **kwargs):
+            result = await super().download(*args, **kwargs)
+            self.session_id = 'changed'
+            return result
+    devices = NewSession()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        job = await submit_batch(app, client, action='delete', mode='backup', phrase='确认备份本地后删除')
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        assert app.state.jobs.get(job['id'])['status'] == 'failed'
+        assert not devices.deleted
+
+
+@pytest.mark.asyncio
+async def test_cancelled_sync_can_resume_and_duplicate_resume_cannot_queue(tmp_path):
+    class PausesOnSecond(BatchDevices):
+        def __init__(self):
+            super().__init__()
+            self.second_entered = asyncio.Event()
+            self.second_release = asyncio.Event()
+
+        async def download(self, kind, ident, work_dir, progress=None):
+            if ident == '124':
+                self.second_entered.set()
+                await self.second_release.wait()
+            return await super().download(kind, ident, work_dir, progress)
+    devices = PausesOnSecond()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        original = await submit_batch(app, client)
+        await asyncio.wait_for(devices.second_entered.wait(), 2)
+        await app.state.jobs.cancel(original['id'])
+        assert app.state.jobs.get(original['id'])['completed_ids'] == ['123']
+        response = await client.post(f'/api/jobs/{original["id"]}/resume')
+        assert response.status_code == 200, response.text
+        duplicate = await client.post(f'/api/jobs/{original["id"]}/resume')
+        assert duplicate.status_code == 409
+        devices.second_release.set()
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        assert app.state.jobs.get(response.json()['id'])['status'] == 'completed'
+        assert devices.downloaded == devices.ids
+
+
+@pytest.mark.asyncio
+async def test_service_recovery_keeps_request_and_progress_for_resume(tmp_path):
+    devices = BatchDevices()
+    app = create_app(tmp_path, devices=devices)
+    app.state.storage.save_job(dict(id='interrupted', type='download', status='running',
+        device_type='feishu', created_at='', completed_ids=['123'], completed_count=1,
+        retry_request=dict(device_id='bean-a', ids=devices.ids)))
+    restarted = create_app(tmp_path, devices=devices)
+    recovered = restarted.state.jobs.get('interrupted')
+    assert recovered['status'] == 'failed'
+    assert recovered['completed_ids'] == ['123']
+    assert recovered['retry_request']['ids'] == devices.ids
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=restarted), base_url='http://127.0.0.1') as client:
+        resumed = await client.post('/api/jobs/interrupted/resume')
+        assert resumed.status_code == 200, resumed.text
+        await asyncio.gather(*list(restarted.state.jobs.tasks.values()))
+        assert restarted.state.jobs.get(resumed.json()['id'])['status'] == 'completed'
+
+
+@pytest.mark.asyncio
+async def test_download_progress_is_visible_during_current_file(tmp_path):
+    devices = BatchDevices()
+    devices.release.clear()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client)
+        await asyncio.wait_for(devices.entered.wait(), 2)
+        job = app.state.jobs.get(submitted['id'])
+        assert (job['current_index'], job['total'], job['completed_count'], job['file_progress']) == (1, 3, 0, 37)
+        assert 'raw_audio' not in job
+        await app.state.jobs.cancel(job['id'])
+
+
+@pytest.mark.asyncio
+async def test_old_batch_cannot_continue_after_user_reconnects_same_device(tmp_path):
+    class UserReconnects(BatchDevices):
+        generation = 1
+
+        def snapshot(self, kind='feishu'):
+            return dict(super().snapshot(kind), connection_generation=self.generation)
+
+        async def download(self, *args, **kwargs):
+            result = await super().download(*args, **kwargs)
+            # The disconnect and user connect both occurred during an await;
+            # desired and the device ID look the same again at the next check.
+            self.generation += 2
+            self.session_id = 'user-reconnected'
+            return result
+    devices = UserReconnects()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client)
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        assert app.state.jobs.get(submitted['id'])['status'] == 'failed'
+        assert devices.downloaded == ['123']
+        assert app.state.storage.records() == []
+
+
+@pytest.mark.asyncio
+async def test_download_with_wrong_device_type_is_not_imported(tmp_path):
+    class WrongType(BatchDevices):
+        async def download(self, kind, ident, work_dir, progress=None):
+            result = await super().download(kind, ident, work_dir, progress)
+            if ident == '123':
+                result['device_type'] = 'local'
+            return result
+    devices = WrongType()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client)
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        records = app.state.storage.records()
+        assert all(record['device_type'] == 'feishu' for record in records)
+        assert {record['original_id'] for record in records} == {'124', '125'}
+        assert app.state.jobs.get(submitted['id'])['status'] == 'failed'

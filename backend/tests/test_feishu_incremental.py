@@ -248,18 +248,16 @@ async def test_invalid_source_never_exports(tmp_path, failure):
 
 
 @pytest.mark.asyncio
-async def test_disconnection_retains_frames_for_explicit_retry(tmp_path):
+async def test_disconnection_retains_frames_and_retries_only_the_gap(tmp_path):
     radio = Radio(count=30)
     radio.drop_at = 15
     device = await radio.device(tmp_path / 'cache')
     try:
-        with pytest.raises(ValueError, match='中断'):
-            await device.download(str(IDENT), tmp_path / 'out', idle_timeout=.1)
-        assert radio.requests == [0]
-        await until(lambda: device.snapshot()['connected'])
         await device.download(str(IDENT), tmp_path / 'out', idle_timeout=.1)
-        assert radio.requests[1] > 0
-        assert device.state['export']['reusedFrames'] == 15
+        assert len(radio.requests) == 2 and radio.requests[0] == 0
+        assert radio.requests[1] == (15 - 4) * 166
+        assert device.state['export']['cachedFrames'] == 30
+        assert device.state['export']['retries'] == 1
     finally:
         await device.disconnect()
 
@@ -290,7 +288,7 @@ async def test_closed_frames_accept_duplicates_out_of_order_but_require_every_fr
     device = await radio.device(tmp_path / 'cache')
     try:
         if gap:
-            with pytest.raises(ValueError, match='完整'):
+            with pytest.raises(ValueError, match='完整|偏移'):
                 await device.download(str(IDENT), tmp_path / 'out', idle_timeout=.2)
             assert not list((tmp_path / 'out').glob('*.ogg'))
         else:

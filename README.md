@@ -15,7 +15,7 @@
 | **实时文字** | 说话的同时网页上出字：先出灰色草稿，停顿后定稿。由本机的 SenseVoice Small 模型识别，不联网。 |
 | **区分说话人** | 每句话前标“说话人1、说话人2…”。只分辨是不是同一个人，不知道姓名，也不保存声纹。 |
 | **文字记录** | 每次开启单独存成一个文本文件，句数没有上限，不会互相覆盖。可以按小时翻看、搜索、复制、下载。 |
-| **管理录音** | 实时输入时缓存原始音频；结束录音后保存到资料库，复用本机已有音频，只补传缺口并核验完整性。支持播放、转文字、整理纪要、打包导出及设备删除。没有缓存的旧录音首次仍需完整下载。 |
+| **管理录音** | 一键同步全部录音到本机资料库，保留设备原件；复用本机缓存，只补传缺口并核验完整性。断线自动续传，取消后可继续。支持播放、转文字、整理纪要、打包导出及设备删除。没有缓存的旧录音首次仍需完整下载。 |
 | **给 Agent 读** | 通过 MCP，Claude Code、Codex 这类 Agent 可以按日期读你保存的文字、搜索、读“刚才说了什么”。只读，不配置就没有。 |
 | **留在本机** | 声音、文字、录音都存在这台电脑上。只有你自己选择用云端模型转写或整理，或者让 Agent 来读时，相应的内容才会发出去。 |
 
@@ -94,6 +94,14 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 带示意图的完整教程在网页“实时输入”页面的下方。
 
 用完以后在网页上点“关闭实时输入”，并把输入法的麦克风改回“自动检测”。
+
+## 同步录音到资料库
+
+结束设备录音并关闭实时输入，在 **录音豆** 页面刷新列表，点击 **同步全部录音**。同步保留设备原件，不自动转写或总结；已有本机归档核验通过后会跳过。页面下方的 **后台任务** 显示当前第几条、已完成条数、文件百分比和失败清单。
+
+蓝牙意外断开后，服务会等待原设备恢复并补传缺口。单文件和整批任务都没有 60 分钟总时长限制，但仍会在长时间没有新数据时重连；设备离线等待期间可以取消。单条录音反复无进展或核验失败，会记录失败并继续其他录音，整批不会显示成全部成功。
+
+取消或服务重启后，连接原录音豆，在失败或已取消的后台任务旁点击 **继续同步**，即可复用这台电脑已有的归档和缓存。手机 App 的缓存不与电脑共享。同步期间保持电脑唤醒、本机服务运行；刷新或关闭网页不影响后台任务。完整步骤见 [录音同步指南](docs/recording-sync.md)。
 
 ## 给 Agent 用（MCP）
 
@@ -255,7 +263,7 @@ This is an unofficial, independent open-source project. It is not connected with
 - **Live text.** Sentences appear in the browser as you speak, recognised on your Mac by SenseVoice Small. Nothing is sent to a cloud.
 - **Speakers told apart.** Each sentence is labelled speaker 1, speaker 2 and so on. Only whether it is the same voice is known, never who it is, and no voiceprint is kept.
 - **Text records.** Every session is saved as its own text file, with no limit on length, to browse by the hour, search, copy and download.
-- **Recordings.** Raw audio is cached during live input. Once recording ends, saving to the library reuses this computer's cached audio, retrieves missing intervals, and verifies completeness. Recordings can be played, transcribed, summarised, exported and deleted. Older recordings without a local cache still need a full first download; audio cached on a phone is not automatically available on this computer.
+- **Recordings.** Sync all recordings to the local library while keeping the originals on the recorder. Sync reuses this computer's cached audio, retrieves missing intervals, and verifies completeness. Interrupted connections recover automatically; cancelled jobs can be resumed. Recordings can be played, transcribed, summarised, exported and deleted. Older recordings without a local cache still need a full first download; audio cached on a phone is not automatically available on this computer.
 - **For agents.** Through MCP, agents such as Claude Code or Codex can read the saved text by day, search it and read the last few minutes. Read-only, and absent unless you set it up.
 - **Kept on your computer.** Sound, text and recordings stay on this computer. Something leaves it only when you choose a cloud model to transcribe or tidy up a recording, or let an agent read the text.
 
@@ -274,6 +282,14 @@ No built-in microphone is required: the recorder captures speech, the website se
 Download **`RecordingBeanAudio2ch-1.0.1-release.zip`** from the [companion driver release](https://github.com/maple-space/open-recording-bean/releases/tag/audio-v1.0.1), extract it and run `安装并启用.command`. One Universal installer covers Intel and Apple Silicon; end users do not need Xcode. The installer installs only the audio driver. Run the website from the cloned source with `./start.sh`; GitHub's generated “Source code” assets are not compiled installers. Current driver builds are ad-hoc signed and the installer is not notarized; what to do when macOS blocks it, and how to remove the driver again, is in the [macOS setup guide](docs/macos-setup.md) (in Chinese). Maintainer release steps are documented in [docs/releasing.md](docs/releasing.md).
 
 A reboot is usually unnecessary. If the driver is not detected, the helper asks before reloading the audio service. If macOS refuses the reload or the device remains unavailable, save your work and restart macOS, then check the device list again.
+
+### Sync recordings to the library
+
+Stop recording and turn off realtime input. On the recorder page, refresh the file list and click **同步全部录音** (sync all recordings). This keeps the originals on the recorder and does not start transcription or summaries. Existing local recordings are checked and skipped when valid. **后台任务** (background jobs) shows the current file, completed count, file progress and any failures.
+
+After an unexpected Bluetooth disconnect, the service waits for the same recorder and resumes the missing audio. Neither an individual transfer nor the whole batch has a 60-minute total time limit. A lack of new data still triggers recovery, and waiting for an offline recorder can be cancelled. A file that repeatedly makes no progress or fails verification is listed as failed while the remaining recordings continue; a partially successful batch is not reported as fully completed.
+
+After cancellation or a service restart, reconnect the original recorder and click **继续同步** (resume sync) beside the failed or cancelled job. This reuses local archives and cached audio; phone caches are separate. Keep the computer awake and the local service running. Refreshing or closing the webpage does not cancel the job. See the [recording sync guide](docs/recording-sync.md) (in Chinese).
 
 ### For agents (MCP)
 

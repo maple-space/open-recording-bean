@@ -230,7 +230,7 @@ def test_new_audio_extends_idle_deadline_but_duplicates_do_not(tmp_path):
         await device.connect('mac-uuid')
         try:
             if duplicate:
-                with pytest.raises(ValueError, match='60 分钟'):
+                with pytest.raises(ValueError, match='读取超时'):
                     await device.download('123', tmp_path, idle_timeout=.045)
             else:
                 result = await device.download('123', tmp_path, idle_timeout=.045)

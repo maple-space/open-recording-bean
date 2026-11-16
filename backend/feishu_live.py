@@ -28,6 +28,7 @@ from contextlib import suppress
 
 from .feishu_protocol import decrypt, parse_info
 from .feishu_cache import CaptureWriter, signature
+from .feishu_errors import TransferInterrupted
 from .feishu_incremental import slices
 
 IDLE_TIMEOUT = 15.0          # seconds without audio while the recorder says it is recording
@@ -166,7 +167,9 @@ async def stream_live(device, on_frame, stop: asyncio.Event, stats: dict, resume
                 last_check = now
                 try:
                     state = (await _info(device)).get('recordStatus')
-                except (asyncio.TimeoutError, TimeoutError):
+                except (asyncio.TimeoutError, TimeoutError, TransferInterrupted) as error:
+                    if isinstance(error, TransferInterrupted) and not isinstance(error.__cause__, TimeoutError):
+                        raise
                     if idle > idle_timeout * 2:
                         raise ValueError('录音豆没有回应，实时音频已停止。') from None
                     continue                                                    # one unanswered query does not end a healthy stream
