@@ -9,7 +9,7 @@ import { Link } from './Link.jsx'
 import { project } from './project.js'
 import { RecordEditor, RecordWorkspace } from './RecordWorkspace.jsx'
 import { ConfirmDialog } from './ConfirmDialog.jsx'
-import { matchingArchive, processApiRecord, usesLocalTranscription, buildSelectedArchive, trackJobResult, runDownloadJob } from './workflow.js'
+import { matchingArchive, processApiRecord, usesLocalTranscription, buildSelectedArchive, trackJobResult, runDownloadJob, visibleRefreshedRecords } from './workflow.js'
 import { JobPanel, PlatformSettings } from './SettingsJobs.jsx'
 import { LivePage } from './LivePage.jsx'
 import { LiveRecords } from './LiveRecords.jsx'
@@ -51,7 +51,7 @@ export default function PortalApp() {
   const [deviceRecordId, setDeviceRecordId] = useState(null)
   const [deleteRequest, setDeleteRequest] = useState(null)
   const editorFlushers = useRef(new Map())
-  const trashedIds = useRef(new Set())
+  const trashedIds = useRef(new Map())
   const recordsRef = useRef(records)
   recordsRef.current = records
   const busyRef = useRef(false)
@@ -99,6 +99,7 @@ export default function PortalApp() {
   const refresh = useCallback(async () => {
     if (pollRef.current) return
     pollRef.current = true
+    const trashedAtStart = new Map(trashedIds.current)
     try {
       const results = await Promise.allSettled([
         api('/api/records'), api('/api/jobs'), api('/api/devices/feishu'),
@@ -108,8 +109,9 @@ export default function PortalApp() {
       const [recordResult, jobResult, deviceResult, settingResult] = results
       setOnline(recordResult.status === 'fulfilled' && jobResult.status === 'fulfilled')
       if (recordResult.status === 'fulfilled') {
-        setRecords(recordResult.value.filter((record) => !trashedIds.current.has(record.id)))
-        setSelectedId((current) => current || recordResult.value[0]?.id || null)
+        const visibleRecords = visibleRefreshedRecords(recordResult.value, trashedIds.current, trashedAtStart)
+        setRecords(visibleRecords)
+        setSelectedId((current) => current || visibleRecords[0]?.id || null)
       }
       if (jobResult.status === 'fulfilled') {
         setJobs(jobResult.value)
@@ -412,7 +414,7 @@ export default function PortalApp() {
           const record = request.records[index]
           await editorFlushers.current.get(record.id)?.()
           await api(`/api/records/${encodeURIComponent(record.id)}/trash`, { method: 'POST' })
-          trashedIds.current.add(record.id)
+          trashedIds.current.set(record.id, Symbol('trash'))
           recordsRef.current = recordsRef.current.filter((item) => item.id !== record.id)
           setRecords(recordsRef.current)
           setSelectedId((current) => current === record.id ? recordsRef.current[0]?.id || null : current)

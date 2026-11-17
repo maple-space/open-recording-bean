@@ -1,5 +1,16 @@
 import { api, jobFailure, terminalStatuses } from './api.js'
 
+export function visibleRefreshedRecords(records, trashedIds, startedWith) {
+  return records.filter((record) => {
+    if (!trashedIds.has(record.id)) return true
+    // A GET begun after this trash operation can only contain a recreated
+    // archive. Older requests must not resurrect a record just removed here.
+    if (startedWith.get(record.id) !== trashedIds.get(record.id)) return false
+    trashedIds.delete(record.id)
+    return true
+  })
+}
+
 // Track separately from submission so callers can choose when to await the result.
 export async function trackJobResult(job, {
   request = api, onUpdate = () => {}, isMounted = () => true,
