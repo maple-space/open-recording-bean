@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from .jobs import JobFailed
+from .task_artifacts import discard_file, discard_empty_directory
 
 
 class FeishuAction(BaseModel):
@@ -104,14 +105,19 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                 await asyncio.to_thread(fingerprint, rid, body.device_id, ident)
                 return record
             data = await devices.download('feishu', ident, work_dir, progress=progress)
-            if body.action == 'download':
-                download_state()
-            else:
-                validate_connection(body.device_id, session_id, connection_generation)
-            if data['device_type'] != 'feishu' or data['device_id'] != body.device_id or str(data['original_id']) != ident:
-                raise ValueError('下载结果标识不匹配，未归档或删除。')
-            return store.import_audio(data['path'], move=True, **{k: data[k] for k in (
-                'device_type', 'device_id', 'original_id', 'title', 'recorded_at', 'duration_ms') if k in data})
+            try:
+                if body.action == 'download':
+                    download_state()
+                else:
+                    validate_connection(body.device_id, session_id, connection_generation)
+                if data['device_type'] != 'feishu' or data['device_id'] != body.device_id or str(data['original_id']) != ident:
+                    raise ValueError('下载结果标识不匹配，未归档或删除。')
+                return store.import_audio(data['path'], move=True, **{k: data[k] for k in (
+                    'device_type', 'device_id', 'original_id', 'title', 'recorded_at', 'duration_ms') if k in data})
+            finally:
+                # Only the current task's output is ours to clean up. A moved
+                # archive is already absent; unrelated adapter paths are kept.
+                await asyncio.to_thread(discard_file, data.get('path'), parent=work_dir)
 
         async def download_batch(progress):
             records, completed_ids, failed_items, skipped_ids = [], [], [], []
@@ -171,7 +177,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
             except Exception as error:
                 raise JobFailed(f'已完成 {len(completed_ids)}/{total} 条；{error}', result()) from None
 
-        async def work(progress):
+        async def run_work(progress):
             count, records, digests = 0, [], []
             async with lock:
                 work_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -201,6 +207,12 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                                 records=records, record=records[-1] if records else None)
                 except Exception as error:
                     raise ValueError(f'{"已删除 " + str(count) + " 条；" if count else ""}{error}') from None
+
+        async def work(progress):
+            try:
+                return await run_work(progress)
+            finally:
+                await asyncio.to_thread(discard_empty_directory, work_dir)
 
         metadata = dict(device_type='feishu', device_id=body.device_id, record_ids=record_ids)
         if body.action == 'download':

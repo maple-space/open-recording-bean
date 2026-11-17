@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .jobs import JobManager
 from .realtime_asr import RealtimeASR
 from .storage import AUDIO_SUFFIXES, Storage
+from .task_artifacts import discard_file, discard_empty_directory
 
 PROJECT = Path(__file__).resolve().parents[1]
 MAX_AUDIO = 1024 * 1024 * 1024
@@ -330,7 +331,7 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
                     raise HTTPException(409, '这条录音正在处理或移入废纸篓，请稍后再下载')
         work_dir = store.root / 'tasks' / uuid.uuid4().hex
 
-        async def work(progress):
+        async def run_work(progress):
             work_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
             if body.type in {'scan', 'connect', 'refresh', 'download'}:
                 await progress('等待设备通道')
@@ -348,17 +349,26 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
                     if job_record_id in trashing:
                         raise ValueError('录音正在移入废纸篓，请稍后再下载')
                     data = await devices.download(body.device_type, body.original_id, work_dir, progress=progress)
-                    archive_id = store.record_id_for(data['device_type'], data['device_id'], data['original_id'])
-                    if archive_id != job_record_id:
-                        raise ValueError('下载结果与提交时的设备录音不一致，未写入资料库，请重新连接设备')
-                    if job_record_id in trashing:
-                        raise ValueError('录音正在移入废纸篓，下载文件已保留，请稍后重试')
-                    saved = store.import_audio(data['path'], move=True, **{key: data[key] for key in (
-                        'device_type', 'device_id', 'original_id', 'title', 'recorded_at', 'duration_ms') if key in data})
-                    return {'record': saved}
+                    try:
+                        archive_id = store.record_id_for(data['device_type'], data['device_id'], data['original_id'])
+                        if archive_id != job_record_id:
+                            raise ValueError('下载结果与提交时的设备录音不一致，未写入资料库，请重新连接设备')
+                        if job_record_id in trashing:
+                            raise ValueError('录音正在移入废纸篓，请稍后重新下载')
+                        saved = store.import_audio(data['path'], move=True, **{key: data[key] for key in (
+                            'device_type', 'device_id', 'original_id', 'title', 'recorded_at', 'duration_ms') if key in data})
+                        return {'record': saved}
+                    finally:
+                        await asyncio.to_thread(discard_file, data.get('path'), parent=work_dir)
             from .workflows import process_record
             return await process_record(store, record, settings, work_dir, progress,
                 mode=body.type, model_lock=model_lock, asr_lock=asr_lock)
+
+        async def work(progress):
+            try:
+                return await run_work(progress)
+            finally:
+                await asyncio.to_thread(discard_empty_directory, work_dir)
 
         metadata = {key: value for key, value in {'device_type': body.device_type, 'record_id': job_record_id,
                     'device_id': download_device_id,

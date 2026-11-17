@@ -43,6 +43,25 @@ def _trash_through_the_system(path) -> bool:
     return bool(moved)
 
 
+def move_to_trash(path):
+    """Move one explicit path through macOS Trash; never permanently delete."""
+    directory = Path(path)
+    if TRASH_COMMAND.is_file():
+        try:
+            result = subprocess.run([str(TRASH_COMMAND), str(directory)], capture_output=True, timeout=30, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            raise ValueError('未能移入 macOS 废纸篓，请检查系统权限后重试。') from None
+        moved = result.returncode == 0
+    else:
+        try:
+            moved = _trash_through_the_system(directory)
+        except Exception:
+            raise ValueError('未能移入 macOS 废纸篓：这台电脑没有系统自带的 trash 命令（macOS 14 起提供），'
+                             '也无法改用系统接口。资料库记录已保留。') from None
+    if not moved or directory.exists():
+        raise ValueError('未能移入 macOS 废纸篓，资料库记录已保留。')
+
+
 class Storage:
     def __init__(self, root: Path):
         self.root = Path(root).resolve()
@@ -180,20 +199,7 @@ class Storage:
         (directory / 'metadata.json').write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
         (directory / 'transcript.txt').write_text(record.get('transcript', ''), encoding='utf-8')
         (directory / 'summary.md').write_text(record.get('summary', ''), encoding='utf-8')
-        if TRASH_COMMAND.is_file():
-            try:
-                result = subprocess.run([str(TRASH_COMMAND), str(directory)], capture_output=True, timeout=30, check=False)
-            except (OSError, subprocess.TimeoutExpired):
-                raise ValueError('未能移入 macOS 废纸篓，请检查系统权限后重试。') from None
-            moved = result.returncode == 0
-        else:
-            try:
-                moved = _trash_through_the_system(directory)
-            except Exception:
-                raise ValueError('未能移入 macOS 废纸篓：这台电脑没有系统自带的 trash 命令（macOS 14 起提供），'
-                                 '也无法改用系统接口。资料库记录已保留。') from None
-        if not moved or directory.exists():
-            raise ValueError('未能移入 macOS 废纸篓，资料库记录已保留。')
+        move_to_trash(directory)
         record['trashed_at'] = now()
         self._write('records', record_id, record)
         return {'id': record_id, 'trashed': True}

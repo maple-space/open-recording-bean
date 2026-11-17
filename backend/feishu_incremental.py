@@ -15,6 +15,7 @@ from pathlib import Path
 from .feishu_cache import WIRE, SourceWorker, signature, check_cancelled
 from .feishu_protocol import decrypt, parse_info
 from .feishu_errors import DeviceIdentityError, TransferInterrupted
+from .task_artifacts import discard_file
 
 
 async def check_idle(device, serial):
@@ -213,6 +214,7 @@ async def download_incremental(device, original_id, output_dir, progress=None, i
                     if raw and len(raw) >= 10 and raw[6] in (8, 0x12):
                         receipt['receivedBytes'] += len(raw) - 10
 
+        path = None
         try:
             async with SourceWorker(device.frame_cache, serial, ident) as source:
                 receipt['reusedFrames'] = await source.call('count')
@@ -298,12 +300,13 @@ async def download_incremental(device, original_id, output_dir, progress=None, i
                 path = Path(output_dir) / f'{uuid.uuid4().hex}.ogg'
                 await source.call('export', path, count, source.cancelled)
                 still_selected()
-                if not device.desired or not device.snapshot()['connected']:
-                    raise ValueError('连接已停止，归档取消；已保存音频保留')
                 receipt.update(status='complete', progress=100)
                 return dict(path=path, device_type='feishu', device_id=serial, original_id=str(ident),
                             title=item['title'], recorded_at=datetime.fromtimestamp(ident, timezone.utc).isoformat(),
                             duration_ms=count * 20)
         except BaseException:
+            # SourceWorker has drained its disk writes before this cleanup.
+            if path is not None:
+                await asyncio.to_thread(discard_file, path)
             receipt['status'] = 'failed'
             raise

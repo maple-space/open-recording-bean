@@ -16,6 +16,7 @@ from bisect import bisect_right
 from pathlib import Path
 
 from .feishu_protocol import iter_ogg
+from .task_artifacts import discard_file
 
 AUDIO, WIRE, WITNESS = 160, 166, 4
 MAX_FRAMES = 1_080_000  # one six-hour hardware source (zero- or one-based)
@@ -207,15 +208,22 @@ class Source:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         partial = path.with_suffix('.ogg.part')
-        with partial.open('xb') as out:
-            for page in iter_ogg(frames(), count):
-                out.write(page)
-            out.flush()
-            os.fsync(out.fileno())
-        if cancelled.is_set():
-            raise ValueError('音频归档已取消')
-        partial.rename(path)
-        return path
+        created = False
+        try:
+            with partial.open('xb') as out:
+                created = True
+                for page in iter_ogg(frames(), count):
+                    out.write(page)
+                out.flush()
+                os.fsync(out.fileno())
+            if cancelled.is_set():
+                raise ValueError('音频归档已取消')
+            partial.rename(path)
+            return path
+        except BaseException:
+            if created:
+                discard_file(partial)
+            raise
 
 
 class SourceWorker:

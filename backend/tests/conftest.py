@@ -20,3 +20,16 @@ def no_models_of_this_computer(monkeypatch):
     monkeypatch.setenv('RECORDING_ASR_DIR', str(RUNS / 'no-models'))
     for name in ('RECORDING_SENSEVOICE_DIR', 'RECORDING_SPEAKER_DIR', 'RECORDING_FUNASR_NANO_DIR'):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def retain_retired_task_artifacts(monkeypatch, tmp_path):
+    """Exercise task cleanup without filling the user's real macOS Trash."""
+    from backend import task_artifacts
+
+    def move(path):
+        retained = tmp_path / 'retired-task-artifacts'
+        retained.mkdir(exist_ok=True)
+        Path(path).rename(retained / f'{uuid.uuid4().hex}-{Path(path).name}')
+
+    monkeypatch.setattr(task_artifacts, 'move_to_trash', move)
