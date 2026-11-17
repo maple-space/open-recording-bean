@@ -39,13 +39,14 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
             raise ValueError('设备连接已变化，本次操作停止；请确认设备后重新发起。')
         return state
 
-    def fingerprint(record_id, device_id, original_id):
+    def fingerprint(record_id, device_id, original_id, for_delete):
         record = store.get_record(record_id)
+        remedy = '未删除设备录音。' if for_delete else '请在资料库将对应记录移到废纸篓后重新同步。'
         if record['device_type'] != 'feishu' or record['device_id'] != device_id or record['original_id'] != original_id:
-            raise ValueError('备份身份不匹配，未删除设备录音。')
+            raise ValueError(f'本机归档身份不匹配，{remedy}')
         path = store.audio_path(record_id)
         if path.stat().st_size <= 0 or path.stat().st_size != record['size_bytes']:
-            raise ValueError('本机备份不完整，未删除设备录音。')
+            raise ValueError(f'本机归档不完整，{remedy}')
         digest = hashlib.sha256()
         with path.open('rb') as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b''):
@@ -106,7 +107,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
             except KeyError:
                 record = None
             if record:
-                await asyncio.to_thread(fingerprint, rid, body.device_id, ident)
+                await asyncio.to_thread(fingerprint, rid, body.device_id, ident, body.action == 'delete')
                 return record
             data = await devices.download('feishu', ident, work_dir, progress=progress)
             try:
@@ -115,7 +116,8 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                 else:
                     validate_connection(body.device_id, session_id, connection_generation)
                 if data['device_type'] != 'feishu' or data['device_id'] != body.device_id or str(data['original_id']) != ident:
-                    raise ValueError('下载结果标识不匹配，未归档或删除。')
+                    ending = '未删除设备录音。' if body.action == 'delete' else '请重新连接原录音豆后重试。'
+                    raise ValueError(f'下载结果标识不匹配，未归档；{ending}')
                 return store.import_audio(data['path'], move=True, **{k: data[k] for k in (
                     'device_type', 'device_id', 'original_id', 'title', 'recorded_at', 'duration_ms') if k in data})
             finally:
@@ -160,7 +162,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                         except KeyError:
                             exists = False
                         record = await archive(ident, rid, file_progress)
-                        await asyncio.to_thread(fingerprint, rid, body.device_id, ident)
+                        await asyncio.to_thread(fingerprint, rid, body.device_id, ident, False)
                         download_state()
                         archived_ids.append(record['id'])
                         completed_ids.append(ident)
@@ -200,11 +202,11 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                             await progress(f'备份并核对录音 {index + 1}/{len(body.ids)}')
                             record = await archive(ident, rid, progress)
                             archived_ids.append(record['id'])
-                            digests.append(await asyncio.to_thread(fingerprint, rid, body.device_id, ident))
+                            digests.append(await asyncio.to_thread(fingerprint, rid, body.device_id, ident, True))
                     if body.action == 'delete':
                         for index, (ident, rid) in enumerate(zip(body.ids, record_ids)):
                             if body.mode == 'backup':
-                                digest = await asyncio.to_thread(fingerprint, rid, body.device_id, ident)
+                                digest = await asyncio.to_thread(fingerprint, rid, body.device_id, ident, True)
                                 if digest != digests[index]:
                                     raise ValueError('本机备份已变化，停止删除。')
                             validate_connection(body.device_id, session_id, connection_generation)

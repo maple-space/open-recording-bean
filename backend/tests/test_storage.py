@@ -40,6 +40,29 @@ def test_paths_and_patch_are_constrained(tmp_path):
         store.update_settings({'api_key': 'not-saved'})
 
 
+def test_explicit_reimport_restores_canonical_identity_and_preserves_manual_edits(tmp_path):
+    """Direct storage reimport contract; this is not a catalog-corruption UI repair."""
+    store = Storage(tmp_path / 'data')
+    source = audio(tmp_path)
+    first = store.import_audio(source, device_type='feishu', device_id='one', original_id='1')
+    rid = first['id']
+    original_audio = store.audio_path(rid)
+    edits = dict(title='人工标题', transcript='人工校订逐字稿', summary='人工纪要', tags=['人工标签'])
+    store.patch_record(rid, edits)
+    damaged = store._read('records', rid)
+    damaged.update(id='wrong-record', device_type='local', device_id='wrong-bean', original_id='999')
+    store._write('records', rid, damaged)
+
+    again = store.import_audio(source, device_type='feishu', device_id='one', original_id='1')
+
+    assert {key: again[key] for key in ('id', 'device_type', 'device_id', 'original_id')} == dict(
+        id=rid, device_type='feishu', device_id='one', original_id='1')
+    assert {key: again[key] for key in edits} == edits
+    assert original_audio.read_bytes() == source.read_bytes()
+    assert store.audio_path(rid) != original_audio
+    assert store.get_record(rid) == again
+
+
 def test_job_recovery_and_raw_transcript_preservation(tmp_path):
     store = Storage(tmp_path / 'data')
     rec = store.import_audio(audio(tmp_path), device_type='local', original_id='a')

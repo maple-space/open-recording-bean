@@ -101,6 +101,8 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 结束设备录音并关闭实时输入，在 **录音豆** 页面刷新列表，点击 **同步全部录音**。同步保留设备原件，不自动转写或总结；已有本机归档核验通过后会跳过。页面下方的 **后台任务** 显示当前第几条、已完成条数、文件百分比和失败清单。
 
+若同步提示本机归档身份不匹配或不完整，且资料库仍能正常定位和操作该记录，将它移到废纸篓后重新同步；重新导入采用本次核验的设备身份，保留原有人工标题、文字和标签。资料库文件本身损坏需要单独排查。服务不会自动覆盖归档、删除设备原件或清空音频缓存；同步失败提示只说明归档问题，删除失败会明确说明设备录音未删除。
+
 新任务只保存录音编号与处理进度，逐字稿和总结保留在资料库，不随每次同步重复写入任务历史。单条录音处理完成后，页面会读取资料库中的最新内容；已有任务历史继续可用。
 
 同步或继续同步提交后，可以直接使用同一页面的资料库。每条录音核验或下载完成、或报告该条失败后，就解除本次同步对它的占用；资料库中对应的录音可随即转写、整理或移到废纸篓。正在处理和还未轮到的录音继续占用。**先备份再删除** 仍占用整批录音，直到任务结束，以便删除前再次核验备份。
@@ -305,6 +307,8 @@ A reboot is usually unnecessary. If the driver is not detected, the helper asks 
 ### Sync recordings to the library
 
 Stop recording and turn off realtime input. On the recorder page, refresh the file list and click **同步全部录音** (sync all recordings). This keeps the originals on the recorder and does not start transcription or summaries. Existing local recordings are checked and skipped when valid. **后台任务** (background jobs) shows the current file, completed count, file progress and any failures.
+
+If sync reports an identity mismatch or an incomplete local archive, and the entry can still be opened and managed in the library, move it to Trash and sync again. Reimport uses the verified device identity while retaining manually edited titles, text, and tags. Corruption of the catalog file itself requires separate diagnosis. The service does not automatically overwrite archives, delete recorder originals, or clear the audio cache. Sync errors describe the archive problem; deletion errors explicitly say the recorder recording was not deleted.
 
 New jobs store recording IDs and progress. Transcripts and summaries stay in the library instead of being copied into job history on every sync. After an individual recording is processed, the page loads its current library content. Existing job history remains available.
 

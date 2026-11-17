@@ -517,3 +517,116 @@ async def test_new_actions_still_reject_missing_catalog_ids(tmp_path, action, mo
         assert response.status_code == 400
         assert '设备目录中没有所选录音' in response.json()['detail']
         assert not devices.downloaded and not devices.deleted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('action', ['download', 'delete'])
+@pytest.mark.parametrize('damage', ['size', 'identity'])
+async def test_archive_verification_failure_wording_matches_action_and_preserves_data(tmp_path, action, damage):
+    devices = BatchDevices()
+    devices.ids = ['123']
+    app = create_app(tmp_path, devices=devices)
+    source = tmp_path / 'original.ogg'
+    source.write_bytes(b'OggS original')
+    store = app.state.storage
+    saved = store.import_audio(source, device_type='feishu', device_id='bean-a', original_id='123')
+    audio = store.audio_path(saved['id'])
+    if damage == 'size':
+        audio.write_bytes(b'OggS')
+    else:
+        record = store._read('records', saved['id'])
+        record['device_id'] = 'wrong-bean'
+        store._write('records', saved['id'], record)
+    before_audio, before_record = audio.read_bytes(), store.get_record(saved['id'])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client, action=action, ids=['123'], mode='backup', phrase='确认备份本地后删除')
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        job = app.state.jobs.get(submitted['id'])
+        assert job['status'] == 'failed'
+        error = job['result']['failed_items'][0]['error'] if action == 'download' else job['error']
+        if action == 'download':
+            assert '删除' not in error
+            assert '本机归档' in error and '废纸篓后重新同步' in error
+        else:
+            assert '未删除设备录音' in error
+        assert not devices.deleted and not devices.downloaded
+        assert audio.read_bytes() == before_audio
+        assert store.get_record(saved['id']) == before_record
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('action', ['download', 'delete'])
+async def test_download_identity_failure_wording_matches_sync_or_delete(tmp_path, action):
+    class WrongIdentity(BatchDevices):
+        async def download(self, *args, **kwargs):
+            result = await super().download(*args, **kwargs)
+            return dict(result, device_id='wrong-bean')
+    devices = WrongIdentity()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client, action=action, ids=['123'], mode='backup', phrase='确认备份本地后删除')
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        job = app.state.jobs.get(submitted['id'])
+        assert job['status'] == 'failed'
+        error = job['result']['failed_items'][0]['error'] if action == 'download' else job['error']
+        assert '未归档' in error
+        if action == 'download':
+            assert '删除' not in error
+        else:
+            assert '未删除设备录音' in error
+        assert not devices.deleted
+        assert not app.state.storage.records()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('damage', ['size', 'identity'])
+async def test_library_selected_trash_then_resync_repairs_archive_and_preserves_manual_text(tmp_path, monkeypatch, damage):
+    devices = BatchDevices()
+    devices.ids = ['123']
+    app = create_app(tmp_path, devices=devices)
+    store = app.state.storage
+    source = tmp_path / 'original.ogg'
+    source.write_bytes(b'OggS original')
+    record = store.import_audio(source, device_type='feishu', device_id='bean-a', original_id='123')
+    rid = record['id']
+    edits = dict(title='人工标题', transcript='人工校订逐字稿', summary='人工纪要', tags=['人工标签'])
+    store.patch_record(rid, edits)
+    original_audio = store.audio_path(rid)
+    if damage == 'size':
+        original_audio.write_bytes(b'OggS')
+    else:
+        damaged = store._read('records', rid)
+        damaged.update(device_type='local', device_id='wrong-bean', original_id='999')
+        store._write('records', rid, damaged)
+    old_bytes = original_audio.read_bytes()
+    retired = tmp_path / 'recoverable-trash'
+    monkeypatch.setattr('backend.storage.move_to_trash', lambda directory: Path(directory).rename(retired))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        failed = await submit_batch(app, client, ids=['123'])
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        assert app.state.jobs.get(failed['id'])['status'] == 'failed'
+        assert not devices.downloaded and not devices.deleted
+        assert original_audio.read_bytes() == old_bytes
+        library = await client.get('/api/records')
+        assert library.status_code == 200 and len(library.json()) == 1
+        action_id = library.json()[0]['id']  # The page acts on the current library response.
+        trashed = await client.post(f'/api/records/{action_id}/trash')
+        assert trashed.status_code == 200, trashed.text
+        assert (retired / original_audio.name).read_bytes() == old_bytes
+        assert (await client.get(f'/api/records/{action_id}')).status_code == 404
+        resumed = await client.post(f'/api/jobs/{failed["id"]}/resume')
+        assert resumed.status_code == 200, resumed.text
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        job = app.state.jobs.get(resumed.json()['id'])
+        assert job['status'] == 'completed', job
+        fresh = store.get_record(rid)
+        assert {key: fresh[key] for key in ('id', 'device_type', 'device_id', 'original_id')} == dict(
+            id=rid, device_type='feishu', device_id='bean-a', original_id='123')
+        assert {key: fresh[key] for key in edits} == edits
+        again = await submit_batch(app, client, ids=['123'])
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        repeated = app.state.jobs.get(again['id'])
+        assert repeated['status'] == 'completed'
+        assert repeated['result']['skipped_ids'] == ['123']
+        assert devices.downloaded == ['123'] and not devices.deleted
+        assert (retired / original_audio.name).read_bytes() == old_bytes

@@ -143,11 +143,12 @@ class Storage:
         except KeyError:
             previous = {}
         record = {
-            'id': record_id, 'device_type': device_type, 'device_id': str(device_id),
-            'original_id': str(original_id), 'title': title or path.stem,
+            'title': title or path.stem,
             'recorded_at': recorded_at or now(), 'created_at': now(),
             'tags': [], 'transcript': '', 'summary': '', 'summary_template': 'meeting', 'custom_prompt': '',
             **previous,
+            'id': record_id, 'device_type': device_type, 'device_id': str(device_id),
+            'original_id': str(original_id),
             'size_bytes': target.stat().st_size, 'duration_ms': duration_ms or previous.get('duration_ms', 0),
             'audio_file': str(target.relative_to(self.root)), 'audio_url': f'/api/records/{record_id}/audio',
             'updated_at': now(),
