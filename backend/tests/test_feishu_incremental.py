@@ -263,6 +263,57 @@ async def test_disconnection_retains_frames_and_retries_only_the_gap(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_http_disconnect_interrupts_download_retry_delay(tmp_path):
+    from backend.app import create_app
+    from backend.devices import DeviceManager
+
+    radio = Radio(count=30)
+    radio.drop_at = 15
+    attempts = []
+    base = radio.ble()
+
+    class CountingBLE(base):
+        async def connect(self):
+            attempts.append(self)
+            await super().connect()
+
+    device = FeishuDevice(ble_loader=lambda: (CountingBLE, FakeScanner),
+                          reconnect_delays=(5,), frame_cache=FrameCache(tmp_path / 'cache'))
+    await device.connect('simulation')
+    devices = DeviceManager()
+    devices.feishu = device
+    app = create_app(tmp_path / 'store', devices=devices)
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+            body = dict(action='download', device_id=SERIAL, ids=[str(IDENT)])
+            submitted = await client.post('/api/devices/feishu/actions', json=body)
+            assert submitted.status_code == 200, submitted.text
+            jid = submitted.json()['id']
+            await until(lambda: app.state.jobs.get(jid).get('stage') == 'reconnecting')
+            # Let progress persistence finish and enter the five-second backoff.
+            await asyncio.sleep(.05)
+            assert not device.snapshot()['connected'] and len(attempts) == 1
+            started = time.monotonic()
+            response = await client.post('/api/devices/feishu/disconnect')
+            elapsed = time.monotonic() - started
+            assert response.status_code == 200, response.text
+            assert elapsed < 1, f'disconnect waited {elapsed:.2f}s for retry delay'
+            await asyncio.wait_for(asyncio.gather(*list(app.state.jobs.tasks.values())), 1)
+            job = app.state.jobs.get(jid)
+            assert job['status'] == 'failed'
+            assert job['retry_request'] == dict(device_id=SERIAL, ids=[str(IDENT)])
+            assert not device.desired and device.supervisor is None
+            with device.frame_cache.source(SERIAL, IDENT) as source:
+                assert source.count() == 15
+            await asyncio.sleep(.3)
+            assert len(attempts) == 1
+    finally:
+        await app.state.jobs.shutdown()
+        await app.state.realtime.close()
+        await device.disconnect()
+
+
+@pytest.mark.asyncio
 async def test_slow_commit_does_not_timeout_an_end_packet_already_received(tmp_path, monkeypatch):
     original = Source.put_many
     def slow(self, *args):

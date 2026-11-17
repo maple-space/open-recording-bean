@@ -283,9 +283,15 @@ async def download_incremental(device, original_id, output_dir, progress=None, i
                                        last_error=str(error))
                         if progress:
                             await report_progress(progress, receipt)
-                        delay = device.delays[min(attempt, len(device.delays) - 1)]
+                        remaining = device.delays[min(attempt, len(device.delays) - 1)]
                         attempt = 0 if progressed else attempt + 1
-                        await asyncio.sleep(delay)
+                        # Release the operation lock promptly when the user stops
+                        # reconnecting, even during the longest retry interval.
+                        while remaining > 0:
+                            still_selected()
+                            step = min(.25, remaining)
+                            await asyncio.sleep(step)
+                            remaining -= step
                 receipt.update(status='verifying', progress=99)
                 if progress:
                     await report_progress(progress, receipt)

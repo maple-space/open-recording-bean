@@ -101,6 +101,8 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 蓝牙意外断开后，服务会等待原设备恢复并补传缺口。单文件和整批任务都没有 60 分钟总时长限制，但仍会在长时间没有新数据时重连；设备离线等待期间可以取消。单条录音反复无进展或核验失败，会记录失败并继续其他录音，整批不会显示成全部成功。
 
+等待自动重连时，点击 **断开连接 / 停止重连** 会及时停止等待，无需等到整段重试间隔结束，也不会继续尝试连接。已存音频缓存和任务的 **继续同步** 入口会保留。
+
 取消或服务重启后，连接原录音豆，在失败或已取消的后台任务旁点击 **继续同步**，即可复用这台电脑已有的归档和缓存。手机 App 的缓存不与电脑共享。同步期间保持电脑唤醒、本机服务运行；刷新或关闭网页不影响后台任务。完整步骤见 [录音同步指南](docs/recording-sync.md)。
 
 主动点击 **断开连接** 会停止当前批量操作。删除期间，已经发出的那条删除仍可能完成；收到成功回应的条数会保留在任务错误信息中，后续删除和目录核验指令不再发送，删除不会自动重试。重新连接后刷新目录，可确认设备最终保留的录音。
@@ -290,6 +292,8 @@ A reboot is usually unnecessary. If the driver is not detected, the helper asks 
 Stop recording and turn off realtime input. On the recorder page, refresh the file list and click **同步全部录音** (sync all recordings). This keeps the originals on the recorder and does not start transcription or summaries. Existing local recordings are checked and skipped when valid. **后台任务** (background jobs) shows the current file, completed count, file progress and any failures.
 
 After an unexpected Bluetooth disconnect, the service waits for the same recorder and resumes the missing audio. Neither an individual transfer nor the whole batch has a 60-minute total time limit. A lack of new data still triggers recovery, and waiting for an offline recorder can be cancelled. A file that repeatedly makes no progress or fails verification is listed as failed while the remaining recordings continue; a partially successful batch is not reported as fully completed.
+
+While waiting to reconnect, clicking **断开连接 / 停止重连** (disconnect / stop reconnecting) stops the wait promptly, without waiting for the full retry interval. No further connection attempts are made. Cached audio and the job's **继续同步** (resume sync) action are preserved.
 
 After cancellation or a service restart, reconnect the original recorder and click **继续同步** (resume sync) beside the failed or cancelled job. This reuses local archives and cached audio; phone caches are separate. Keep the computer awake and the local service running. Refreshing or closing the webpage does not cancel the job. See the [recording sync guide](docs/recording-sync.md) (in Chinese).
 
