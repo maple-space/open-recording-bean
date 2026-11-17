@@ -484,3 +484,19 @@ async def test_expired_connection_intent_does_not_reject_candidate():
         release.set()
         await asyncio.gather(recovering, return_exceptions=True)
         await device.disconnect()
+
+
+async def test_known_lookup_cancelled_at_ready_completion_never_retrieves(monkeypatch):
+    module, calls, _, _ = fake_backend(monkeypatch)
+    manager_type, _, _ = module._load_macos_backend()
+    task = None
+
+    async def ready(self):
+        calls.append(('ready',))
+        task.cancel()
+
+    monkeypatch.setattr(manager_type, 'wait_until_ready', ready)
+    task = asyncio.create_task(module.retrieve_known_macos_device(ADDRESS))
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert calls == [('ready',)]

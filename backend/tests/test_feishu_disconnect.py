@@ -7,6 +7,7 @@ import pytest
 
 from backend.app import create_app
 from backend.devices import DeviceManager
+from backend.async_wait import wait_with_timeout
 from backend.feishu import FeishuDevice
 from backend.tests.test_feishu import FakeBLE, FakeScanner, packet
 from backend.tests.test_feishu_incremental import IDENT, SERIAL, Radio
@@ -20,9 +21,10 @@ def forbid_hardware(monkeypatch):
 
 
 async def until(predicate, timeout=1):
-    async with asyncio.timeout(timeout):
+    async def poll():
         while not predicate():
             await asyncio.sleep(.005)
+    await wait_with_timeout(poll(), timeout)
 
 
 @pytest.mark.asyncio
@@ -148,7 +150,7 @@ async def test_disconnect_before_scheduled_gatt_write_prevents_command(monkeypat
     await device.connect('simulation')
     peer = device.client
     before = list(peer.commands)
-    original_wait = asyncio.wait_for
+    original_wait = wait_with_timeout
     stop_next_write = True
 
     async def publish_stop_before_send(awaitable, timeout):
@@ -158,7 +160,7 @@ async def test_disconnect_before_scheduled_gatt_write_prevents_command(monkeypat
             device.request_disconnect()
         return await original_wait(awaitable, timeout)
 
-    monkeypatch.setattr('backend.feishu.asyncio.wait_for', publish_stop_before_send)
+    monkeypatch.setattr('backend.feishu.wait_with_timeout', publish_stop_before_send)
     try:
         with pytest.raises(ValueError, match='连接'):
             await device.refresh()

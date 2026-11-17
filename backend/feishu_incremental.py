@@ -12,6 +12,7 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .async_wait import wait_with_timeout
 from .feishu_cache import WIRE, SourceWorker, signature, check_cancelled
 from .feishu_protocol import decrypt, parse_info
 from .feishu_errors import DeviceIdentityError, TransferInterrupted
@@ -92,8 +93,8 @@ async def read_range(device, ident, count, plan, source, timeout, receipt, progr
             if now >= deadline and queue.empty():
                 raise TransferInterrupted('增量补传暂时没有新音频，已保存部分保留，等待续传')
             try:
-                raw = queue.get_nowait() if not queue.empty() else await asyncio.wait_for(queue.get(), min(.25, deadline - now))
-            except TimeoutError:
+                raw = queue.get_nowait() if not queue.empty() else await wait_with_timeout(queue.get(), min(.25, deadline - now))
+            except (asyncio.TimeoutError, TimeoutError):
                 raw = b''
             if raw is None:
                 await flush()

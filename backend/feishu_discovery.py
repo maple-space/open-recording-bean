@@ -6,9 +6,10 @@ That adapter is isolated here and feature-detected: unsupported Bleak versions
 retain normal discovery. Imports are lazy so non-macOS services remain usable.
 No scan or connection is started by this lookup.
 """
-import asyncio
 from sys import platform
 from uuid import UUID
+
+from .async_wait import wait_with_timeout
 
 
 def _load_macos_backend():
@@ -35,7 +36,7 @@ async def retrieve_known_macos_device(address):
         return None
     manager_type, uuid_type, device_type = backend
     manager = manager_type()
-    await asyncio.wait_for(manager.wait_until_ready(), 10)
+    await wait_with_timeout(manager.wait_until_ready(), 10)
     central = getattr(manager, 'central_manager', None)
     retrieve = getattr(central, 'retrievePeripheralsWithIdentifiers_', None)
     if not callable(retrieve):

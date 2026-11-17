@@ -26,6 +26,7 @@ import struct
 import time
 from contextlib import suppress
 
+from .async_wait import wait_with_timeout
 from .feishu_protocol import decrypt, parse_info
 from .feishu_cache import CaptureWriter, signature
 from .feishu_errors import TransferInterrupted
@@ -117,7 +118,7 @@ async def stream_live(device, on_frame, stop: asyncio.Event, stats: dict, resume
                     deliberate = True
                     return 'stopped' if stop.is_set() else 'disconnect_requested'
                 try:
-                    raw = await asyncio.wait_for(queue.get(), 0.25)
+                    raw = await wait_with_timeout(queue.get(), 0.25)
                 except (asyncio.TimeoutError, TimeoutError):
                     raw = b''
                 if raw is None:
@@ -168,7 +169,7 @@ async def stream_live(device, on_frame, stop: asyncio.Event, stats: dict, resume
                 try:
                     state = (await _info(device)).get('recordStatus')
                 except (asyncio.TimeoutError, TimeoutError, TransferInterrupted) as error:
-                    if isinstance(error, TransferInterrupted) and not isinstance(error.__cause__, TimeoutError):
+                    if isinstance(error, TransferInterrupted) and not isinstance(error.__cause__, (asyncio.TimeoutError, TimeoutError)):
                         raise
                     if idle > idle_timeout * 2:
                         raise ValueError('录音豆没有回应，实时音频已停止。') from None

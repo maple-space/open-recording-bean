@@ -66,7 +66,8 @@ async def test_a_file_that_repeatedly_drops_without_progress_does_not_block_the_
 
 
 @pytest.mark.asyncio
-async def test_one_wrapped_info_timeout_does_not_end_healthy_realtime_audio():
+@pytest.mark.parametrize('error_type', [asyncio.TimeoutError, TimeoutError])
+async def test_one_wrapped_info_timeout_does_not_end_healthy_realtime_audio(error_type):
     from backend.feishu_errors import TransferInterrupted
     from backend.tests.test_live import World, connected, live_stream, until
     world = World()
@@ -76,7 +77,7 @@ async def test_one_wrapped_info_timeout_does_not_end_healthy_realtime_audio():
     async def exchange(kind, ident, *args, **kwargs):
         if (kind, ident) == (1, 1) and len(frames) >= 30 and not failures:
             failures.append(len(frames))
-            raise TransferInterrupted('query timeout') from TimeoutError()
+            raise TransferInterrupted('query timeout') from error_type()
         return await original(kind, ident, *args, **kwargs)
     device._exchange = exchange
     task = live_stream(device, frames, stop, stats, info_interval=.02)

@@ -444,24 +444,25 @@ def test_export_checks_every_cached_frame_before_publishing(tmp_path):
 async def test_task_cancelled_as_radio_write_completes_never_archives(tmp_path):
     radio = Radio(count=12)
     device = await radio.device(tmp_path / 'cache')
-    write = device._write
-    async def racing_write(kind, ident, payload=b''):
-        await write(kind, ident, payload)
-        if (kind, ident) == (0x1a, 7):
-            ready = asyncio.get_running_loop().create_future()
-            ready.set_result(None)
-            asyncio.current_task().cancel()
-            # Python 3.11 wait_for may return an already-ready result despite
-            # cancellation. The transport must check the task's cancellation flag.
-            await asyncio.wait_for(ready, 1)
-    device._write = racing_write
+    peer = device.client
+    write = peer.write_gatt_char
+    task = None
+
+    async def racing_write(uuid, data, **kwargs):
+        await write(uuid, data, **kwargs)
+        if data[5:7] == b'\x1a\x07':
+            # Cancel at actual GATT completion, inside the production wait.
+            # Python 3.10 wait_for used to swallow this external request.
+            task.cancel()
+
+    peer.write_gatt_char = racing_write
     try:
         task = asyncio.create_task(device.download(str(IDENT), tmp_path / 'out', idle_timeout=.1))
         with pytest.raises(asyncio.CancelledError):
             await task
         assert not list((tmp_path / 'out').glob('*.ogg'))
     finally:
-        device._write = write
+        peer.write_gatt_char = write
         await device.disconnect()
 
 

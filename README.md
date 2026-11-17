@@ -46,6 +46,8 @@ cd open-recording-bean
 - **Node.js 22.12 或更新**（也支持 20.x 中的 20.19 及以上版本）：`brew install node`，或到 [nodejs.org](https://nodejs.org) 下载。
 - **Python 3.10 到 3.13**：`brew install python@3.12`，或到 [python.org](https://www.python.org/downloads/) 下载。电脑上有 `uv` 的话可以不装，脚本会用它准备。
 
+Python 3.10.20 和 3.11.10 已通过完整后端离线测试，覆盖设备超时重试、取消同步和本地文字处理任务。
+
 打开网页后，首页的“四步用起来”会按这台电脑的实际情况告诉你还差哪一步：
 
 ![首页：四步用起来，每一步都显示这台电脑现在的状态](docs/images/home.png)
@@ -287,6 +289,8 @@ cd open-recording-bean
 ```
 
 Requires macOS, Node.js 22.12+ (or 20.x at 20.19+) and Python 3.10 to 3.13; uv can prepare Python if needed. First run installs application dependencies and downloads/verifies approximately 270 MB of speech and speaker models. No API key or model-path configuration is needed. See the [first-run guide](docs/first-run.md).
+
+The complete offline backend suite passes on Python 3.10.20 and 3.11.10, including device timeout recovery, sync cancellation and local text-processing jobs.
 
 Intel (`x86_64`) and Apple Silicon (`arm64`) are supported and functionally verified. macOS 11 or later is required: everything has been verified on macOS 15, while macOS 11 to 14 meet the requirements of every component but have not been tested on a real machine. The companion audio driver is a Universal build for macOS 11 or later. Recorder support covers soundcore Work D3200 with firmware 04.92. Windows, Linux and other firmware versions are outside the verified support scope. The interface is in Simplified Chinese.
 

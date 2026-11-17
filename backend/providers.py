@@ -18,6 +18,8 @@ import tempfile
 from typing import Callable
 import uuid
 
+from .async_wait import wait_with_timeout
+
 
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 MAX_PROMPT_BYTES = 2 * 1024 * 1024
@@ -250,28 +252,31 @@ async def _run_jsonl(command: list[str], *, stdin: str, cwd: Path, env: dict,
         with suppress(BrokenPipeError, ConnectionResetError):
             await process.stdin.wait_closed()
 
+    async def run():
+        nonlocal process, tasks, success
+        process = await asyncio.create_subprocess_exec(
+            *command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE, cwd=str(cwd), env=env, start_new_session=True,
+        )
+        tasks = [asyncio.create_task(task()) for task in (write_stdin, stdout_reader, stderr_reader)]
+        tasks.append(asyncio.create_task(process.wait()))
+        await asyncio.gather(*tasks)
+        if process.returncode != 0:
+            # Never expose raw verbose logs (which can contain configuration,
+            # transcript text or credentials) through API error messages.
+            diagnostic = stderr_tail.decode("utf-8", errors="replace").lower()
+            if any(marker in diagnostic for marker in ("not logged", "login", "unauthorized", "authentication", "401")):
+                hint = "请在终端完成相应 CLI 登录后重试。"
+            elif any(marker in diagnostic for marker in ("rate limit", "quota", "429")):
+                hint = "当前额度或速率受限，请稍后重试。"
+            else:
+                hint = "请检查相应 CLI 是否可用、登录是否有效，以及模型名称是否正确。"
+            raise ProviderError(f"本地子进程退出（代码 {process.returncode}）。{hint}")
+        success = True
+
     try:
-        async with asyncio.timeout(timeout):
-            process = await asyncio.create_subprocess_exec(
-                *command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE, cwd=str(cwd), env=env, start_new_session=True,
-            )
-            tasks = [asyncio.create_task(task()) for task in (write_stdin, stdout_reader, stderr_reader)]
-            tasks.append(asyncio.create_task(process.wait()))
-            await asyncio.gather(*tasks)
-            if process.returncode != 0:
-                # Never expose raw verbose logs (which can contain configuration,
-                # transcript text or credentials) through API error messages.
-                diagnostic = stderr_tail.decode("utf-8", errors="replace").lower()
-                if any(marker in diagnostic for marker in ("not logged", "login", "unauthorized", "authentication", "401")):
-                    hint = "请在终端完成相应 CLI 登录后重试。"
-                elif any(marker in diagnostic for marker in ("rate limit", "quota", "429")):
-                    hint = "当前额度或速率受限，请稍后重试。"
-                else:
-                    hint = "请检查相应 CLI 是否可用、登录是否有效，以及模型名称是否正确。"
-                raise ProviderError(f"本地子进程退出（代码 {process.returncode}）。{hint}")
-            success = True
-    except TimeoutError as error:
+        await wait_with_timeout(run(), timeout)
+    except (asyncio.TimeoutError, TimeoutError) as error:
         raise ProviderError("本地任务超时，已终止子进程。可缩短录音或提高任务超时设置后重试。") from error
     except OSError as error:
         raise ProviderError(f"无法启动本地子进程（{type(error).__name__}），请检查安装与执行权限。") from error

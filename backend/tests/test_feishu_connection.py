@@ -6,6 +6,7 @@ import time
 import pytest
 from bleak.exc import BleakError
 
+from backend.async_wait import wait_with_timeout
 from backend.feishu import FeishuDevice
 from backend.feishu_errors import DeviceIdentityError, TransferInterrupted
 from backend.tests.test_feishu import AudioBLE, FakeBLE, FakeScanner, packet
@@ -36,7 +37,7 @@ async def test_disconnect_interrupts_pending_command_with_retryable_type():
         await device.disconnect()
 
 
-@pytest.mark.parametrize('error', [BleakError('GATT unavailable'), TimeoutError(), OSError('radio unavailable')])
+@pytest.mark.parametrize('error', [BleakError('GATT unavailable'), asyncio.TimeoutError(), TimeoutError(), OSError('radio unavailable')])
 async def test_gatt_write_transport_failures_are_retryable(error):
     class BrokenWrite(FakeBLE):
         async def write_gatt_char(self, *args, **kwargs):
@@ -64,10 +65,10 @@ async def test_disconnected_write_is_retryable_but_programming_errors_are_not():
 async def test_exchange_timeout_is_retryable_and_clears_pending(monkeypatch):
     device = device_for()
     await device.connect('simulation')
-    original = asyncio.wait_for
+    original = wait_with_timeout
     async def shorter_wait(awaitable, timeout):
         return await original(awaitable, min(timeout, .01))
-    monkeypatch.setattr('backend.feishu.asyncio.wait_for', shorter_wait)
+    monkeypatch.setattr('backend.feishu.wait_with_timeout', shorter_wait)
     try:
         with pytest.raises(TransferInterrupted):
             await device._exchange(0x55, 1)
@@ -357,4 +358,26 @@ async def test_new_disconnect_cancels_initial_connect_waiting_for_lock():
         assert not Peer.instances
     finally:
         await asyncio.gather(connecting, disconnecting, return_exceptions=True)
+        await device.disconnect()
+
+
+async def test_exchange_cancelled_at_gatt_completion_never_returns_response():
+    device = device_for()
+    await device.connect('simulation')
+    peer = device.client
+    write = peer.write_gatt_char
+    task = None
+
+    async def racing_write(*args, **kwargs):
+        await write(*args, **kwargs)
+        task.cancel()
+
+    peer.write_gatt_char = racing_write
+    try:
+        task = asyncio.create_task(device._exchange(1, 1))
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert device.pending == {}
+    finally:
+        peer.write_gatt_char = write
         await device.disconnect()

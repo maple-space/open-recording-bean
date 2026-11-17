@@ -9,12 +9,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from sys import platform
 
+from .async_wait import wait_with_timeout
 from .feishu_errors import DeviceIdentityError, TransferInterrupted
 from .feishu_protocol import SERVICE, WRITE, NOTIFY, Packets, DeviceCrypto, command, parse_info, parse_directory, decrypt, mux_ogg
 
 
 def _transport_error(error):
-    if isinstance(error, (TimeoutError, OSError)):
+    if isinstance(error, (asyncio.TimeoutError, TimeoutError, OSError)):
         return True
     # Preserve lazy BLE loading for services and tests that never use hardware.
     try:
@@ -122,7 +123,7 @@ class FeishuDevice:
             raise TransferInterrupted('录音豆尚未连接，请等待重连或搜索设备。')
 
         async def send():
-            # wait_for schedules the coroutine separately: recheck at the actual
+            # The bounded wait schedules the coroutine separately: recheck at the actual
             # send boundary, after any stop intent published while it was queued.
             if self._operation_generation is not None and (
                     not self.desired or self.state['connection_generation'] != self._operation_generation):
@@ -130,7 +131,7 @@ class FeishuDevice:
             await self.client.write_gatt_char(WRITE, command(kind, ident, payload), response=False)
 
         try:
-            await asyncio.wait_for(send(), 10)
+            await wait_with_timeout(send(), 10)
         except Exception as error:
             if not _transport_error(error):
                 raise
@@ -142,8 +143,8 @@ class FeishuDevice:
         self.pending[kind, ident] = future
         try:
             await self._write(kind, ident, payload)
-            return await asyncio.wait_for(future, 10)
-        except TimeoutError as error:
+            return await wait_with_timeout(future, 10)
+        except (asyncio.TimeoutError, TimeoutError) as error:
             raise TransferInterrupted('录音豆回应超时，请等待连接恢复。') from error
         finally:
             self.pending.pop((kind, ident), None)
@@ -160,7 +161,7 @@ class FeishuDevice:
             if client.is_connected:
                 self._connection_event('intentional_disconnect', reason)
             try:
-                await asyncio.wait_for(client.disconnect(), 10)
+                await wait_with_timeout(client.disconnect(), 10)
                 if client.is_connected:
                     raise TransferInterrupted('蓝牙连接尚未释放，请重试断开。')
             except Exception as error:
@@ -487,8 +488,8 @@ class FeishuDevice:
                 while True:
                     remaining = idle_timeout - (time.monotonic() - last_new)
                     try:
-                        raw = await asyncio.wait_for(queue.get(), max(0, remaining))
-                    except TimeoutError:
+                        raw = await wait_with_timeout(queue.get(), max(0, remaining))
+                    except (asyncio.TimeoutError, TimeoutError):
                         raise TransferInterrupted('文件读取超时：持续未收到新的音频数据，请检查蓝牙并唤醒录音豆。') from None
                     if raw is None:
                         raise TransferInterrupted('蓝牙已断开，下载中止；请等待连接恢复。')
