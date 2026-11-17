@@ -40,7 +40,8 @@ export async function runDownloadJob({
     const lastRecordId = result.record_id || result.record?.id
     if (lastRecordId) setRecordId(lastRecordId)
     const reused = includeSkipped && result.skipped_ids?.length ? `，其中 ${result.skipped_ids.length} 条复用已有归档` : ''
-    setNotice({ type: 'success', text: `${result.count || 0} 条录音已核验并保存在本机资料库${reused}；设备原件已保留。`, recordId: lastRecordId })
+    const missing = result.missing_ids?.length ? `已跳过 ${result.missing_ids.length} 条设备目录中不存在的录音（${result.missing_ids.join('、')}）。` : ''
+    setNotice({ type: 'success', text: `${result.count || 0} 条录音已核验并保存在本机资料库${reused}；设备原件已保留。${missing}`, recordId: lastRecordId })
     return result
   } catch (error) {
     if (isMounted()) showError(error)
@@ -48,6 +49,31 @@ export async function runDownloadJob({
   } finally {
     if (isMounted()) refresh()
   }
+}
+
+// A completed resume settles the same original request through its ancestor chain.
+export function settledDownloadJobs(jobs) {
+  const byId = new Map(jobs.map((job) => [job.id, job]))
+  const settled = new Set()
+  const isDownload = (job) => job?.type === 'download' && job.device_type === 'feishu'
+  for (const completed of jobs) {
+    if (!isDownload(completed) || completed.status !== 'completed') continue
+    const request = completed.retry_request
+    if (!request?.device_id || !request.ids?.length) continue
+    const ids = new Set(request.ids)
+    const seen = new Set([completed.id])
+    let parentId = completed.resumed_from
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId)
+      const parent = byId.get(parentId)
+      const original = parent?.retry_request
+      if (!isDownload(parent) || original?.device_id !== request.device_id ||
+          original.ids?.length !== ids.size || !original.ids.every((id) => ids.has(id))) break
+      settled.add(parentId)
+      parentId = parent.resumed_from
+    }
+  }
+  return settled
 }
 
 export function matchingArchive(records, kind, deviceId, fileId) {

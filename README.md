@@ -113,7 +113,7 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 等待自动重连时，点击 **断开连接 / 停止重连** 会及时停止等待，无需等到整段重试间隔结束，也不会继续尝试连接。停止或恢复过程出错时也会释放传输状态，已存音频缓存和任务的 **继续同步** 入口会保留。
 
-取消或服务重启后，连接原录音豆，在失败或已取消的后台任务旁点击 **继续同步**，即可复用这台电脑已有的归档和缓存。手机 App 的缓存不与电脑共享。同步期间保持电脑唤醒、本机服务运行；刷新或关闭网页不影响后台任务。完整步骤见 [录音同步指南](docs/recording-sync.md)。
+取消或服务重启后，连接原录音豆，在失败或已取消的后台任务旁点击 **继续同步**，即可复用这台电脑已有的归档和缓存。继续同步会跳过已不在设备目录中的录音，并列出编号和数量；一条都不剩时会明确提示。原任务被后续续同步任务成功完成后，不再显示继续入口。手机 App 的缓存不与电脑共享。同步期间保持电脑唤醒、本机服务运行；刷新或关闭网页不影响后台任务。完整步骤见 [录音同步指南](docs/recording-sync.md)。
 
 主动点击 **断开连接** 会停止当前批量操作。删除期间，已经发出的那条删除仍可能完成；收到成功回应的条数会保留在任务错误信息中，后续删除和目录核验指令不再发送，删除不会自动重试。重新连接后刷新目录，可确认设备最终保留的录音。
 
@@ -316,7 +316,7 @@ If the original address stops working, the service checks up to three candidates
 
 While waiting to reconnect, clicking **断开连接 / 停止重连** (disconnect / stop reconnecting) stops the wait promptly, without waiting for the full retry interval. No further connection attempts are made. Transfer state is released even if stopping or recovery fails. Cached audio and the job's **继续同步** (resume sync) action are preserved.
 
-After cancellation or a service restart, reconnect the original recorder and click **继续同步** (resume sync) beside the failed or cancelled job. This reuses local archives and cached audio; phone caches are separate. Keep the computer awake and the local service running. Refreshing or closing the webpage does not cancel the job. See the [recording sync guide](docs/recording-sync.md) (in Chinese).
+After cancellation or a service restart, reconnect the original recorder and click **继续同步** (resume sync) beside the failed or cancelled job. This reuses local archives and cached audio; phone caches are separate. Resume skips recordings missing from the device directory and lists their IDs and count, or explains when none remain. Once a later resume completes the original request, older jobs no longer offer resume. Keep the computer awake and the local service running. Refreshing or closing the webpage does not cancel the job. See the [recording sync guide](docs/recording-sync.md) (in Chinese).
 
 Clicking **断开连接** (disconnect) stops the current batch. A delete command already sent may still complete; the job error preserves the acknowledged deletion count. No further delete or directory-verification commands are sent, and deletes are never retried automatically. Reconnect and refresh the directory to confirm which recordings remain.
 

@@ -1,25 +1,28 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle2, Circle, Clock3, KeyRound, LoaderCircle, Settings2, X } from 'lucide-react'
 import { deviceNames, formatDate, humanError, jobNames, localModelChoices, localModelKey, localModelName, terminalStatuses } from './api.js'
-import { settingsForProvider } from './workflow.js'
+import { settingsForProvider, settledDownloadJobs } from './workflow.js'
 
 export function JobPanel({ jobs, onCancel, onResume, busy, device, online }) {
   const [expanded, setExpanded] = useState(false)
   const active = jobs.filter((job) => !terminalStatuses.has(job.status))
   const shown = expanded ? jobs : jobs.slice(0, 3)
+  const settled = settledDownloadJobs(jobs)
   if (!jobs.length) return null
   const statuses = { queued: '排队中', running: '处理中', completed: '已完成', failed: '失败', cancelled: '已取消' }
   return <section className="jobs-panel" aria-label="后台任务"><div className="jobs-heading"><h2><Clock3 size={16} />后台任务 {active.length > 0 && <span>{active.length} 进行中</span>}</h2><button onClick={() => setExpanded(!expanded)}>{expanded ? '收起' : `查看最近 ${jobs.length} 项`}</button></div>
     <div className="jobs-list">{shown.map((job) => {
-      const canResume = job.type === 'download' && job.device_type === 'feishu' && ['failed', 'cancelled'].includes(job.status) && job.retry_request?.ids?.length > 0
+      const canResume = !settled.has(job.id) && job.type === 'download' && job.device_type === 'feishu' && ['failed', 'cancelled'].includes(job.status) && job.retry_request?.ids?.length > 0
       const resumeDisabled = !!busy || !online || !device?.connected || device?.live || device?.device_id !== job.retry_request?.device_id || active.some((item) => item.device_type === 'feishu')
       const completed = job.completed_ids || job.result?.completed_ids || []
       const failed = job.failed_items || job.result?.failed_items || []
+      const missing = job.result?.missing_ids || []
       return <div key={job.id} className={`job-row ${job.status}`}>
       {job.status === 'running' || job.status === 'queued' ? <LoaderCircle className="p-spin" size={17} /> : job.status === 'completed' ? <CheckCircle2 size={17} /> : job.status === 'failed' ? <AlertCircle size={17} /> : <Circle size={17} />}
       <div className="job-copy"><strong>{jobNames[job.type] || job.type}{job.device_type && ` · ${deviceNames[job.device_type] || job.device_type}`}</strong><span>{humanError(job.error || job.message || statuses[job.status])}</span>
         {job.total > 0 && <><span>第 {job.current_index || 0}/{job.total} 条 · 已完成 {job.completed_count || 0} 条 · 当前文件 {job.file_progress || 0}%</span>{!terminalStatuses.has(job.status) && <progress aria-label="当前文件同步进度" max="100" value={job.file_progress || 0} />}
           <details><summary>已完成 {completed.length} 条 · 失败 {failed.length} 条</summary><p>已完成：{completed.join('、') || '暂无'}</p>{failed.length > 0 && <ul>{failed.map((item) => <li key={item.original_id}>{item.original_id}：{humanError(item.error)}</li>)}</ul>}</details></>}
+        {missing.length > 0 && <span>已跳过 {missing.length} 条设备目录中不存在的录音：{missing.join('、')}</span>}
         {canResume && resumeDisabled && <span>连接原录音豆并等待当前任务结束后，可继续同步。</span>}
       </div>
       <small>{formatDate(job.created_at)}</small><span className="job-status">{statuses[job.status] || job.status}</span>

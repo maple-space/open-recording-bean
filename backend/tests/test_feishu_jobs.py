@@ -453,3 +453,67 @@ async def test_download_with_wrong_device_type_is_not_imported(tmp_path):
         assert all(record['device_type'] == 'feishu' for record in records)
         assert {record['original_id'] for record in records} == {'124', '125'}
         assert app.state.jobs.get(submitted['id'])['status'] == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_resume_skips_missing_catalog_ids_preserves_request_and_reserves_only_present(tmp_path):
+    devices = BatchDevices()
+    devices.ids = ['124']
+    devices.release.clear()
+    app = create_app(tmp_path, devices=devices)
+    request = dict(device_id='bean-a', ids=['123', '124', '125'])
+    app.state.storage.save_job(dict(id='old', type='download', status='failed', created_at='',
+        device_type='feishu', retry_request=request))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        response = await client.post('/api/jobs/old/resume')
+        assert response.status_code == 200, response.text
+        resumed = response.json()
+        try:
+            await asyncio.wait_for(devices.entered.wait(), 2)
+            assert resumed['retry_request'] == request
+            assert resumed['record_ids'] == [app.state.storage.record_id_for('feishu', 'bean-a', '124')]
+        finally:
+            devices.release.set()
+            await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        job = app.state.jobs.get(resumed['id'])
+        assert job['status'] == 'completed', job
+        assert job['retry_request'] == request
+        assert job['result']['missing_ids'] == ['123', '125']
+        assert job['result']['missing_count'] == 2
+        assert job['result']['completed_ids'] == ['124']
+        assert job['result']['count'] == job['result']['total'] == 1
+        assert devices.downloaded == ['124']
+        assert not devices.deleted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('wrong_device', [False, True])
+async def test_resume_all_missing_reports_explicitly_after_identity_validation(tmp_path, wrong_device):
+    devices = BatchDevices()
+    devices.ids = []
+    if wrong_device:
+        devices.device_id = 'other'
+    app = create_app(tmp_path, devices=devices)
+    app.state.storage.save_job(dict(id='old', type='download', status='cancelled', created_at='',
+        device_type='feishu', retry_request=dict(device_id='bean-a', ids=['123', '124'])))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        response = await client.post('/api/jobs/old/resume')
+        assert response.status_code == 400
+        assert ('身份已变化' if wrong_device else '原任务的 2 条录音均已不在设备目录中') in response.json()['detail']
+        assert not app.state.jobs.tasks
+        assert not devices.downloaded
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('action,mode', [('download', 'backup'), ('delete', 'backup'), ('delete', 'direct')])
+async def test_new_actions_still_reject_missing_catalog_ids(tmp_path, action, mode):
+    devices = BatchDevices()
+    devices.ids = ['123']
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        response = await client.post('/api/devices/feishu/actions', json=dict(action=action,
+            device_id='bean-a', ids=['123', '124'], mode=mode,
+            phrase='确认备份本地后删除' if mode == 'backup' else '确认从设备永久删除'))
+        assert response.status_code == 400
+        assert '设备目录中没有所选录音' in response.json()['detail']
+        assert not devices.downloaded and not devices.deleted

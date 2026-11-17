@@ -77,3 +77,32 @@ test('legacy jobs with embedded recordings still show progress and failures', ()
   assert.match(html, /124：完整性冲突/)
   assert.match(html, /继续同步/)
 })
+
+test('completed direct and transitive resumes settle old failed and cancelled jobs', () => {
+  const middle = { ...job, id: 'middle', status: 'cancelled', resumed_from: job.id }
+  const completed = { ...job, id: 'done', status: 'completed', resumed_from: middle.id }
+  assert.doesNotMatch(renderJobs([job, { ...completed, resumed_from: job.id }]), /继续同步/)
+  assert.doesNotMatch(renderJobs([job, middle, completed]), /继续同步/)
+})
+
+test('failed descendants and unrelated completed jobs do not hide resume', () => {
+  const descendant = { ...job, id: 'next', resumed_from: job.id }
+  assert.equal((renderJobs([job, descendant]).match(/>继续同步<\/button>/g) || []).length, 2)
+  assert.match(renderJobs([job, { ...job, id: 'unrelated', status: 'completed' }]), /继续同步/)
+  const wrongRequest = { ...job, id: 'other', status: 'completed', resumed_from: job.id,
+    retry_request: { device_id: 'other', ids: ['123', '124'] } }
+  assert.match(renderJobs([job, wrongRequest]), /继续同步/)
+})
+
+test('resume ancestry cycles terminate and do not settle failed-only chains', () => {
+  const first = { ...job, resumed_from: 'second' }
+  const second = { ...job, id: 'second', resumed_from: job.id }
+  assert.equal((renderJobs([first, second]).match(/>继续同步<\/button>/g) || []).length, 2)
+  assert.doesNotMatch(renderJobs([first, second, { ...job, id: 'done', status: 'completed', resumed_from: job.id }]), /继续同步/)
+})
+
+test('completed resume explains missing device recordings in its task details', () => {
+  const html = renderJobs([{ ...job, status: 'completed', result: { missing_ids: ['123', '125'], missing_count: 2 } }])
+  assert.match(html, /已跳过 2 条设备目录中不存在的录音/)
+  assert.match(html, /123、125/)
+})

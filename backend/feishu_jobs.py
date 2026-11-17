@@ -65,9 +65,13 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
         connection_generation = state.get('connection_generation')
         validate_connection(body.device_id, session_id, connection_generation)
         file_ids = {row['original_id'] for row in state.get('files', [])}
-        if any(n not in file_ids for n in body.ids):
+        missing_ids = [n for n in body.ids if n not in file_ids]
+        if missing_ids and not resumed_from:
             raise ValueError('设备目录中没有所选录音，请刷新列表。')
-        record_ids = [store.record_id_for('feishu', body.device_id, n) for n in body.ids]
+        ids = [n for n in body.ids if n in file_ids]
+        if resumed_from and not ids:
+            raise ValueError(f'原任务的 {len(missing_ids)} 条录音均已不在设备目录中，没有可继续同步的录音；请刷新列表。')
+        record_ids = [store.record_id_for('feishu', body.device_id, n) for n in ids]
         if any(record_busy(rid) for rid in record_ids):
             raise HTTPException(409, '所选录音还有进行中的任务，请先完成或取消。')
         # Serialize intent too, so a second tab cannot queue a second recording
@@ -121,16 +125,16 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
 
         async def download_batch(progress):
             archived_ids, completed_ids, failed_items, skipped_ids = [], [], [], []
-            total = len(body.ids)
+            total = len(ids)
 
             def result():
                 return dict(count=len(archived_ids), total=total, record_ids=archived_ids,
                             record_id=archived_ids[-1] if archived_ids else None,
                             completed_ids=completed_ids, failed_items=failed_items,
-                            skipped_ids=skipped_ids)
+                            skipped_ids=skipped_ids, missing_ids=missing_ids, missing_count=len(missing_ids))
 
             try:
-                for index, (ident, rid) in enumerate(zip(body.ids, record_ids), 1):
+                for index, (ident, rid) in enumerate(zip(ids, record_ids), 1):
                     file_percent = 0
                     reserved_ids = record_ids[index - 1:]
 
@@ -222,7 +226,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
         metadata = dict(device_type='feishu', device_id=body.device_id, record_ids=record_ids)
         if body.action == 'download':
             metadata.update(retry_request=dict(device_id=body.device_id, ids=list(body.ids)),
-                            total=len(body.ids), completed_count=0, completed_ids=[], failed_items=[])
+                            total=len(ids), completed_count=0, completed_ids=[], failed_items=[])
             if resumed_from:
                 metadata['resumed_from'] = resumed_from
         return manager.submit('device_delete' if body.action == 'delete' else 'record_' + body.action if body.action in ('start', 'pause') else 'download', work, metadata)

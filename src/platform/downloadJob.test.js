@@ -117,3 +117,15 @@ test('leaving the page during a download does not show a false completion notice
   assert.deepEqual(state.recordIds, [])
   assert.equal(state.refreshes, 1)
 })
+
+test('resumed download completion reports recordings missing from the device', async () => {
+  const { state, submission, completion, polling, start } = harness({ includeSkipped: false })
+  const tracking = start()
+  submission.resolve({ id: 'job', status: 'running' })
+  await polling.promise
+  completion.resolve({ id: 'job', status: 'completed', result: {
+    count: 1, record_id: 'last', missing_ids: ['123', '125'], missing_count: 2,
+  } })
+  await tracking
+  assert.match(state.notices[0].text, /已跳过 2 条设备目录中不存在的录音（123、125）/)
+})
