@@ -101,6 +101,8 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 蓝牙意外断开后，服务会等待原设备恢复并补传缺口。单文件和整批任务都没有 60 分钟总时长限制，但仍会在长时间没有新数据时重连；设备离线等待期间可以取消。单条录音反复无进展或核验失败，会记录失败并继续其他录音，整批不会显示成全部成功。
 
+原地址失效时，服务会按已确认的序列号找回原设备，每轮最多核对 3 个候选。序列号不符或设备信息无法解析的地址，在本次连接期间不再连接，也不占后续轮次的名额；连接失败或超时仍可重试。排除记录只在内存中保存地址，不保存其他设备的序列号，手动连接或断开时清空。首次连接始终只尝试你选择的设备。
+
 等待自动重连时，点击 **断开连接 / 停止重连** 会及时停止等待，无需等到整段重试间隔结束，也不会继续尝试连接。已存音频缓存和任务的 **继续同步** 入口会保留。
 
 取消或服务重启后，连接原录音豆，在失败或已取消的后台任务旁点击 **继续同步**，即可复用这台电脑已有的归档和缓存。手机 App 的缓存不与电脑共享。同步期间保持电脑唤醒、本机服务运行；刷新或关闭网页不影响后台任务。完整步骤见 [录音同步指南](docs/recording-sync.md)。
@@ -192,6 +194,7 @@ Agent 能用六个工具：
 | 位置 | 内容 |
 | --- | --- |
 | `backend/feishu_protocol.py`、`backend/feishu.py`、`backend/devices.py` | 录音豆的协议和连接：分包、密钥交换、解密、录音列表、下载、删除 |
+| `backend/feishu_errors.py`、`backend/feishu_discovery.py` | 区分传输中断与身份变化，辅助查找 macOS 已知蓝牙设备 |
 | `backend/feishu_live.py`、`backend/live.py`、`backend/audio_bridge.py` | 实时传声、送虚拟声卡、文字记录文件 |
 | `backend/feishu_cache.py`、`backend/feishu_incremental.py`、`backend/feishu_jobs.py` | 本机音频缓存，保存录音时只补缺口并核验，批量保存和删除 |
 | `backend/realtime_asr.py`、`backend/speakers.py` | 实时识别和区分说话人 |
@@ -292,6 +295,8 @@ A reboot is usually unnecessary. If the driver is not detected, the helper asks 
 Stop recording and turn off realtime input. On the recorder page, refresh the file list and click **同步全部录音** (sync all recordings). This keeps the originals on the recorder and does not start transcription or summaries. Existing local recordings are checked and skipped when valid. **后台任务** (background jobs) shows the current file, completed count, file progress and any failures.
 
 After an unexpected Bluetooth disconnect, the service waits for the same recorder and resumes the missing audio. Neither an individual transfer nor the whole batch has a 60-minute total time limit. A lack of new data still triggers recovery, and waiting for an offline recorder can be cancelled. A file that repeatedly makes no progress or fails verification is listed as failed while the remaining recordings continue; a partially successful batch is not reported as fully completed.
+
+If the original address stops working, the service checks up to three candidates per recovery round against the recorder's verified serial number. Addresses with a different serial number or unreadable device information are skipped for the rest of that connection session and do not use later rounds' slots. Connection failures and timeouts remain retryable. Only rejected addresses are kept in memory, never other devices' serial numbers; manually connecting or disconnecting clears them. The first connection only attempts the device you selected.
 
 While waiting to reconnect, clicking **断开连接 / 停止重连** (disconnect / stop reconnecting) stops the wait promptly, without waiting for the full retry interval. No further connection attempts are made. Cached audio and the job's **继续同步** (resume sync) action are preserved.
 

@@ -43,6 +43,7 @@ class FeishuDevice:
         self._last_activity = time.monotonic()
         self._closing_client = self._lost_client = None
         self._known_peripheral = None  # One identity-verified macOS BLEDevice for this service instance.
+        self._rejected_recovery_addresses = set()  # Address-only exclusions for the current connection intent.
         self.state = dict(connected=False, device_id='', device_name='', files=[], info={},
                           connection_status='disconnected', connection_generation=0,
                           error=None, recordStatus=0, export=None,
@@ -252,14 +253,17 @@ class FeishuDevice:
                 name = candidate.name or advertisement.local_name or ''
                 services = {service.lower() for service in (advertisement.service_uuids or [])}
                 if (candidate.address.lower() in seen
+                        or candidate.address.lower() in self._rejected_recovery_addresses
                         or (SERVICE not in services and name.lower() != 'soundcore work')):
                     continue
                 seen.add(candidate.address.lower())
                 tried += 1
                 try:
                     info = await self._connect_identity(candidate, expected_sn, intent, client_type)
-                except (TransferInterrupted, DeviceIdentityError):
+                except (TransferInterrupted, DeviceIdentityError) as error:
                     self._check_connection_intent(intent)  # An expired intent must never advance to another candidate.
+                    if isinstance(error, DeviceIdentityError):
+                        self._rejected_recovery_addresses.add(candidate.address.lower())
                     await self._close_client(reason='candidate_rejected')
                     self._check_connection_intent(intent)
                 else:
@@ -285,6 +289,7 @@ class FeishuDevice:
     async def connect(self, address):
         if not address:
             raise ValueError('请先搜索并选择要连接的录音豆。')
+        self._rejected_recovery_addresses.clear()
         if self.snapshot()['connected'] and self.address == address:
             return self.snapshot()
         self.state['connection_generation'] += 1
@@ -361,6 +366,7 @@ class FeishuDevice:
         """Publish stop intent synchronously, before callers wait for job locks."""
         self.state['connection_generation'] += 1
         self.desired = False
+        self._rejected_recovery_addresses.clear()
 
     async def disconnect(self):
         self.request_disconnect()

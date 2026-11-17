@@ -316,3 +316,171 @@ async def test_disconnected_intent_stops_rediscovery_before_any_further_commands
         release.set()
         await asyncio.gather(recovering, *([disconnecting] if disconnecting else []), return_exceptions=True)
         await device.disconnect()
+
+
+@pytest.mark.parametrize('invalid_info', [None, b'short', bytes(51)], ids=['wrong-serial', 'short-info', 'empty-serial'])
+async def test_recovery_rejects_each_neighbour_once_across_rounds(invalid_info):
+    candidates = {f'{i}282ee65-5f36-4c2a-b93f-e93e77b24b2f': 'other12345678901' for i in range(4)}
+    Peer, Scanner = rotation_backend(candidates)
+    class Candidate(Peer):
+        async def write_gatt_char(self, uuid, data, **kwargs):
+            if invalid_info is not None and self.address in candidates and data[5:7] == b'\x01\x01':
+                self.commands.append((1, 1))
+                self.callback(None, packet(1, 1, invalid_info))
+                return
+            await super().write_gatt_char(uuid, data, **kwargs)
+    device = FeishuDevice(ble_loader=lambda: (Candidate, Scanner), reconnect_delays=(60,))
+    await device.connect(ADDRESS)
+    Scanner.stale = True
+    try:
+        for _ in range(3):
+            async with device.lock:
+                with pytest.raises(TransferInterrupted):
+                    await device._open(ADDRESS, SERIAL)
+        probes = [client for client in Peer.instances if client.address in candidates]
+        assert [client.address for client in probes] == list(candidates)
+        assert all(client.commands == [(1, 1)] and not client.is_connected for client in probes)
+        assert device._rejected_recovery_addresses == set(candidates)
+        assert device.state['device_id'] == SERIAL and device.desired
+    finally:
+        await device.disconnect()
+
+
+async def test_recovery_reaches_fourth_candidate_by_second_round():
+    neighbours = {f'{i}282ee65-5f36-4c2a-b93f-e93e77b24b2f': 'other12345678901' for i in range(3)}
+    new = '9282ee65-5f36-4c2a-b93f-e93e77b24b2f'
+    Peer, Scanner = rotation_backend({**neighbours, new: SERIAL})
+    device = FeishuDevice(ble_loader=lambda: (Peer, Scanner), reconnect_delays=(60,))
+    await device.connect(ADDRESS)
+    Scanner.stale = True
+    try:
+        async with device.lock:
+            with pytest.raises(TransferInterrupted):
+                await device._open(ADDRESS, SERIAL)
+            assert [client.address for client in Peer.instances[1:]] == list(neighbours)
+            await device._open(ADDRESS, SERIAL)
+        assert [client.address for client in Peer.instances[1:]] == [*neighbours, new]
+        assert device.snapshot()['connected'] and device.address == new
+        assert device.state['device_id'] == SERIAL
+        assert device.client.commands == [(1, 1), (0x1b, 0x0e)]
+        assert len(Scanner.discovered) == 2
+    finally:
+        await device.disconnect()
+
+
+@pytest.mark.parametrize('same_address', [False, True])
+async def test_user_connect_clears_rejected_recovery_addresses(same_address):
+    new = '9282ee65-5f36-4c2a-b93f-e93e77b24b2f'
+    candidates = {OTHER: 'other12345678901', new: SERIAL}
+    Peer, Scanner = rotation_backend(candidates)
+    device = FeishuDevice(ble_loader=lambda: (Peer, Scanner), reconnect_delays=(60,))
+    await device.connect(ADDRESS)
+    Scanner.stale = True
+    try:
+        async with device.lock:
+            await device._open(ADDRESS, SERIAL)
+        assert device._rejected_recovery_addresses == {OTHER}
+        Scanner.stale = False
+        await device.connect(new if same_address else ADDRESS)
+        assert device.snapshot()['connected']
+        candidates[OTHER] = SERIAL  # The previously rejected address must be eligible in this new intent.
+        Scanner.stale = True
+        async with device.lock:
+            await device._open(device.address, SERIAL)
+        assert device.address == OTHER and device.snapshot()['connected']
+        assert len([client for client in Peer.instances if client.address == OTHER]) == 2
+        assert device._rejected_recovery_addresses == set()
+    finally:
+        await device.disconnect()
+
+
+async def test_user_disconnect_clears_rejected_recovery_addresses():
+    candidates = {OTHER: 'other12345678901'}
+    Peer, Scanner = rotation_backend(candidates)
+    device = FeishuDevice(ble_loader=lambda: (Peer, Scanner), reconnect_delays=(60,))
+    await device.connect(ADDRESS)
+    Scanner.stale = True
+    try:
+        async with device.lock:
+            with pytest.raises(TransferInterrupted):
+                await device._open(ADDRESS, SERIAL)
+        assert device._rejected_recovery_addresses == {OTHER}
+        await device.disconnect()
+        assert device._rejected_recovery_addresses == set()
+        assert not device.desired
+        Scanner.stale = False
+        await device.connect(ADDRESS)
+        candidates[OTHER] = SERIAL
+        Scanner.stale = True
+        async with device.lock:
+            await device._open(ADDRESS, SERIAL)
+        assert device.address == OTHER and device.snapshot()['connected']
+        assert len([client for client in Peer.instances if client.address == OTHER]) == 2
+    finally:
+        await device.disconnect()
+
+
+@pytest.mark.parametrize('stage,error_type', [('connect', BleakError), ('connect', TimeoutError), ('info', TimeoutError)])
+async def test_recovery_retries_candidate_after_transport_failure(stage, error_type):
+    Peer, Scanner = rotation_backend({OTHER: SERIAL})
+    class TransientCandidate(Peer):
+        failed = False
+        def fail_once(self, current_stage):
+            if self.address == OTHER and stage == current_stage and not TransientCandidate.failed:
+                TransientCandidate.failed = True
+                raise error_type('temporary candidate transport failure')
+        async def connect(self):
+            self.fail_once('connect')
+            await super().connect()
+        async def write_gatt_char(self, uuid, data, **kwargs):
+            if data[5:7] == b'\x01\x01':
+                self.fail_once('info')
+            await super().write_gatt_char(uuid, data, **kwargs)
+    device = FeishuDevice(ble_loader=lambda: (TransientCandidate, Scanner), reconnect_delays=(60,))
+    await device.connect(ADDRESS)
+    Scanner.stale = True
+    try:
+        async with device.lock:
+            with pytest.raises(TransferInterrupted):
+                await device._open(ADDRESS, SERIAL)
+            await device._open(ADDRESS, SERIAL)
+        assert len([client for client in Peer.instances if client.address == OTHER]) == 2
+        assert device.snapshot()['connected'] and device.address == OTHER
+        assert device._rejected_recovery_addresses == set()
+    finally:
+        await device.disconnect()
+
+
+async def test_expired_connection_intent_does_not_reject_candidate():
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def pause(stage):
+        if stage == 'info':
+            entered.set()
+            await release.wait()
+    candidates = {OTHER: 'other12345678901'}
+    Peer, Scanner = rotation_backend(candidates, pause=pause)
+    device = FeishuDevice(ble_loader=lambda: (Peer, Scanner), reconnect_delays=(60,))
+    await device.connect(ADDRESS)
+    Scanner.stale = True
+    async def recover():
+        async with device.lock:
+            await device._open(ADDRESS, SERIAL)
+    recovering = asyncio.create_task(recover())
+    try:
+        await asyncio.wait_for(entered.wait(), .5)
+        device.state['connection_generation'] += 1  # Supersede this attempt without a later cleanup hiding its effects.
+        release.set()
+        with pytest.raises(DeviceIdentityError, match='连接操作已变化'):
+            await recovering
+        assert Peer.instances[-1].commands == [(1, 1)]
+        assert not device.snapshot()['connected']
+        candidates[OTHER] = SERIAL
+        async with device.lock:
+            await device._open(ADDRESS, SERIAL)
+        assert device.address == OTHER and device.snapshot()['connected']
+        assert len([client for client in Peer.instances if client.address == OTHER]) == 2
+        assert device._rejected_recovery_addresses == set()
+    finally:
+        release.set()
+        await asyncio.gather(recovering, return_exceptions=True)
+        await device.disconnect()
