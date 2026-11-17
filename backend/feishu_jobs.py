@@ -132,6 +132,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
             try:
                 for index, (ident, rid) in enumerate(zip(body.ids, record_ids), 1):
                     file_percent = 0
+                    reserved_ids = record_ids[index - 1:]
 
                     async def file_progress(value):
                         nonlocal file_percent
@@ -143,7 +144,8 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                             stage=details.get('stage', 'download'), progress=file_percent,
                             total=total, current_index=index, current_id=ident,
                             file_progress=file_percent, completed_count=len(completed_ids),
-                            completed_ids=list(completed_ids), failed_items=list(failed_items)))
+                            completed_ids=list(completed_ids), failed_items=list(failed_items),
+                            record_ids=reserved_ids))
 
                     await file_progress('核对本机归档')
                     download_state()
@@ -160,6 +162,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                         completed_ids.append(ident)
                         if exists:
                             skipped_ids.append(ident)
+                        reserved_ids = record_ids[index:]
                         await file_progress(dict(message='已核验并归档', progress=100))
                     except DownloadStopped:
                         raise
@@ -168,6 +171,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                         # A user disconnect/device switch always stops the batch.
                         download_state()
                         failed_items.append(dict(original_id=ident, error=str(error)[:1000]))
+                        reserved_ids = record_ids[index:]
                         await file_progress(dict(message=f'此条失败：{error}', stage='file_failed'))
                 if failed_items:
                     raise JobFailed(f'已完成 {len(completed_ids)}/{total} 条，{len(failed_items)} 条失败；可继续同步。', result())

@@ -59,3 +59,27 @@ async def test_batch_progress_survives_cancellation_without_saving_raw_payloads(
     assert recovered['file_progress'] == 37
     assert 'raw_audio' not in recovered and 'transcript' not in recovered
     assert recovered['retry_request'] == job['retry_request']
+
+
+@pytest.mark.asyncio
+async def test_progress_replaces_reserved_records_without_changing_retry_request(tmp_path):
+    manager = JobManager(Storage(tmp_path / 'data'))
+    entered = asyncio.Event()
+    retry_request = dict(device_id='bean-a', ids=['123', '124'])
+
+    async def work(progress):
+        await progress(dict(record_ids=['record-124'], completed_ids=['123'],
+            retry_request={'ids': []}, transcript='private'))
+        entered.set()
+        await asyncio.Event().wait()
+
+    submitted = manager.submit('download', work, dict(
+        record_ids=['record-123', 'record-124'], retry_request=retry_request))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        persisted = manager.get(submitted['id'])
+        assert persisted['record_ids'] == ['record-124']
+        assert persisted['retry_request'] == retry_request
+        assert 'transcript' not in persisted
+    finally:
+        await manager.shutdown()

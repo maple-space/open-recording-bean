@@ -9,7 +9,7 @@ import { Link } from './Link.jsx'
 import { project } from './project.js'
 import { RecordEditor, RecordWorkspace } from './RecordWorkspace.jsx'
 import { ConfirmDialog } from './ConfirmDialog.jsx'
-import { matchingArchive, processApiRecord, usesLocalTranscription, buildSelectedArchive, trackJobResult } from './workflow.js'
+import { matchingArchive, processApiRecord, usesLocalTranscription, buildSelectedArchive, trackJobResult, runDownloadJob } from './workflow.js'
 import { JobPanel, PlatformSettings } from './SettingsJobs.jsx'
 import { LivePage } from './LivePage.jsx'
 import { LiveRecords } from './LiveRecords.jsx'
@@ -236,23 +236,17 @@ export default function PortalApp() {
 
   function downloadFiles(files) {
     const deviceId = deviceRef.current?.device_id
-    return run('同步录音到本机', async () => {
-      const result = await submitJob({ action: 'download', device_id: deviceId, ids: files.map((file) => String(file.original_id)) }, '/api/devices/feishu/actions', { hydrateRecord: false })
-      const lastRecordId = result?.record_id || result?.record?.id
-      if (lastRecordId) setDeviceRecordId(lastRecordId)
-      setNotice({ type: 'success', text: `${result?.count || 0} 条录音已核验并保存在本机资料库${result?.skipped_ids?.length ? `，其中 ${result.skipped_ids.length} 条复用已有归档` : ''}；设备原件已保留。`, recordId: lastRecordId })
-      return result
-    })
+    return downloadJob({ label: '同步录音到本机', includeSkipped: true,
+      body: { action: 'download', device_id: deviceId, ids: files.map((file) => String(file.original_id)) } })
   }
 
   function resumeDownload(id) {
-    return run('继续同步录音', async () => {
-      const result = await submitJob(undefined, `/api/jobs/${encodeURIComponent(id)}/resume`, { hydrateRecord: false })
-      const lastRecordId = result?.record_id || result?.record?.id
-      if (lastRecordId) setDeviceRecordId(lastRecordId)
-      setNotice({ type: 'success', text: `${result?.count || 0} 条录音已核验并保存在本机资料库；设备原件已保留。`, recordId: lastRecordId })
-      return result
-    })
+    return downloadJob({ label: '继续同步录音', endpoint: `/api/jobs/${encodeURIComponent(id)}/resume` })
+  }
+
+  function downloadJob(options) {
+    return runDownloadJob({ ...options, run, onUpdate: updateJob, setRecordId: setDeviceRecordId,
+      setNotice, showError, refresh, isMounted: () => mounted.current })
   }
 
   function openDeviceFile(file) {

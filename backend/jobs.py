@@ -28,7 +28,7 @@ class JobManager:
         async def progress(value):
             details = value if isinstance(value, dict) else {'message': str(value)}
             fields = ('message', 'progress', 'stage', 'total', 'current_index', 'current_id',
-                      'file_progress', 'completed_count', 'completed_ids', 'failed_items')
+                      'file_progress', 'completed_count', 'completed_ids', 'failed_items', 'record_ids')
             job.update({key: details[key] for key in fields if key in details})
             self.storage.save_job(job)
         async def run():

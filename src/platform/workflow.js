@@ -22,6 +22,34 @@ export async function trackJobResult(job, {
   return result
 }
 
+// Batch sync uses compact results; single-record callers still use trackJobResult.
+export async function runDownloadJob({
+  label, body, endpoint = '/api/devices/feishu/actions', includeSkipped = false,
+  run, onUpdate, setRecordId, setNotice, showError, refresh,
+  request = api, isMounted = () => true, wait,
+}) {
+  const job = await run(label, async () => {
+    const job = await request(endpoint, { method: 'POST', body })
+    onUpdate(job)
+    return job
+  })
+  if (!job) return null
+  try {
+    const result = await trackJobResult(job, { request, onUpdate, isMounted, wait, hydrateRecord: false })
+    if (!result || !isMounted()) return null
+    const lastRecordId = result.record_id || result.record?.id
+    if (lastRecordId) setRecordId(lastRecordId)
+    const reused = includeSkipped && result.skipped_ids?.length ? `，其中 ${result.skipped_ids.length} 条复用已有归档` : ''
+    setNotice({ type: 'success', text: `${result.count || 0} 条录音已核验并保存在本机资料库${reused}；设备原件已保留。`, recordId: lastRecordId })
+    return result
+  } catch (error) {
+    if (isMounted()) showError(error)
+    return null
+  } finally {
+    if (isMounted()) refresh()
+  }
+}
+
 export function matchingArchive(records, kind, deviceId, fileId) {
   if (!deviceId) return null
   return records.find((record) => record.device_type === kind && record.device_id === deviceId && String(record.original_id) === String(fileId)) || null
