@@ -103,6 +103,8 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 取消或服务重启后，连接原录音豆，在失败或已取消的后台任务旁点击 **继续同步**，即可复用这台电脑已有的归档和缓存。手机 App 的缓存不与电脑共享。同步期间保持电脑唤醒、本机服务运行；刷新或关闭网页不影响后台任务。完整步骤见 [录音同步指南](docs/recording-sync.md)。
 
+主动点击 **断开连接** 会停止当前批量操作。删除期间，已经发出的那条删除仍可能完成；收到成功回应的条数会保留在任务错误信息中，后续删除和目录核验指令不再发送，删除不会自动重试。重新连接后刷新目录，可确认设备最终保留的录音。
+
 ## 给 Agent 用（MCP）
 
 让 Claude Code、Codex、Cursor 这类 Agent 直接读你保存的文字，比如“总结我今天下午说了什么”“上周谁提到过报价”。它是只读的：不能改，不能删，也不会去连录音豆。不配置就等于没有这个功能。
@@ -290,6 +292,8 @@ Stop recording and turn off realtime input. On the recorder page, refresh the fi
 After an unexpected Bluetooth disconnect, the service waits for the same recorder and resumes the missing audio. Neither an individual transfer nor the whole batch has a 60-minute total time limit. A lack of new data still triggers recovery, and waiting for an offline recorder can be cancelled. A file that repeatedly makes no progress or fails verification is listed as failed while the remaining recordings continue; a partially successful batch is not reported as fully completed.
 
 After cancellation or a service restart, reconnect the original recorder and click **继续同步** (resume sync) beside the failed or cancelled job. This reuses local archives and cached audio; phone caches are separate. Keep the computer awake and the local service running. Refreshing or closing the webpage does not cancel the job. See the [recording sync guide](docs/recording-sync.md) (in Chinese).
+
+Clicking **断开连接** (disconnect) stops the current batch. A delete command already sent may still complete; the job error preserves the acknowledged deletion count. No further delete or directory-verification commands are sent, and deletes are never retried automatically. Reconnect and refresh the directory to confirm which recordings remain.
 
 ### For agents (MCP)
 

@@ -151,6 +151,56 @@ async def submit_batch(app, client, **overrides):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['direct', 'backup'])
+@pytest.mark.parametrize('stop', ['desired', 'generation'])
+async def test_delete_batch_stops_when_connection_intent_changes(tmp_path, mode, stop):
+    class IntentChanges(BatchDevices):
+        generation = 1
+
+        def snapshot(self, kind='feishu'):
+            return dict(super().snapshot(kind), connection_generation=self.generation)
+
+        async def delete(self, ident):
+            await super().delete(ident)
+            if stop == 'desired':
+                self.desired = False
+            else:
+                # The transport/session can look unchanged when a new intent is published.
+                self.generation += 1
+
+    devices = IntentChanges()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        submitted = await submit_batch(app, client, action='delete', mode=mode,
+            phrase='确认从设备永久删除' if mode == 'direct' else '确认备份本地后删除')
+        await asyncio.gather(*list(app.state.jobs.tasks.values()))
+        assert devices.deleted == ['123']
+        job = app.state.jobs.get(submitted['id'])
+        assert job['status'] == 'failed'
+        assert '已删除 1 条' in job['error']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('action', ['download', 'delete', 'start', 'pause'])
+async def test_action_submission_rejects_disconnected_intent_on_open_transport(tmp_path, action):
+    class SnapshotIntent(Devices):
+        def snapshot(self, kind='feishu'):
+            return dict(super().snapshot(kind), desired_connected=False)
+
+    devices = SnapshotIntent()
+    app = create_app(tmp_path, devices=devices)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://127.0.0.1') as client:
+        response = await client.post('/api/devices/feishu/actions', json=dict(
+            action=action, device_id='bean-a', ids=['123'], mode='direct', phrase='确认从设备永久删除'))
+        try:
+            assert response.status_code == 400, response.text
+            assert not app.state.jobs.tasks
+            assert not devices.deleted
+        finally:
+            await app.state.jobs.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_batch_continues_after_one_bad_file_and_persists_retry_request(tmp_path):
     devices = BatchDevices()
     devices.failures.add('124')

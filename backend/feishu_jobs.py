@@ -24,9 +24,17 @@ class DownloadStopped(ValueError):
 
 
 def register_feishu_actions(app, store, manager, devices, lock, record_busy):
-    def validate_connection(device_id, session_id):
+    def connection_intent(device_id, generation):
         state = devices.snapshot('feishu')
-        if not state.get('connected') or state.get('device_id') != device_id or state.get('session_id') != session_id:
+        desired = getattr(devices.feishu, 'desired', state.get('desired_connected'))
+        if (state.get('device_id') != device_id or desired is False
+                or (generation is not None and state.get('connection_generation') != generation)):
+            raise DownloadStopped('设备已断开或身份已变化，本次操作停止；连接原设备后可重新发起。')
+        return state, desired
+
+    def validate_connection(device_id, session_id, generation):
+        state, _ = connection_intent(device_id, generation)
+        if not state.get('connected') or state.get('session_id') != session_id:
             raise ValueError('设备连接已变化，本次操作停止；请确认设备后重新发起。')
         return state
 
@@ -54,7 +62,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
         state = devices.snapshot('feishu')
         session_id = state.get('session_id')
         connection_generation = state.get('connection_generation')
-        validate_connection(body.device_id, session_id)
+        validate_connection(body.device_id, session_id, connection_generation)
         file_ids = {row['original_id'] for row in state.get('files', [])}
         if any(n not in file_ids for n in body.ids):
             raise ValueError('设备目录中没有所选录音，请刷新列表。')
@@ -68,11 +76,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
         work_dir = store.root / 'tasks' / uuid.uuid4().hex
 
         def download_state():
-            current = devices.snapshot('feishu')
-            desired = getattr(devices.feishu, 'desired', current.get('desired_connected'))
-            if (current.get('device_id') != body.device_id or desired is False
-                    or (connection_generation is not None and current.get('connection_generation') != connection_generation)):
-                raise DownloadStopped('设备已断开或身份已变化，同步已停止；连接原设备后可继续同步。')
+            current, desired = connection_intent(body.device_id, connection_generation)
             # Older adapters have no reconnect intent, so cannot safely wait.
             if not current.get('connected') and desired is not True:
                 raise DownloadStopped('设备连接已中断，同步已停止；连接原设备后可继续同步。')
@@ -91,7 +95,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
             if body.action == 'download':
                 await wait_for_download_connection(progress)
             else:
-                validate_connection(body.device_id, session_id)
+                validate_connection(body.device_id, session_id, connection_generation)
             try:
                 record = store.get_record(rid)
             except KeyError:
@@ -103,7 +107,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
             if body.action == 'download':
                 download_state()
             else:
-                validate_connection(body.device_id, session_id)
+                validate_connection(body.device_id, session_id, connection_generation)
             if data['device_type'] != 'feishu' or data['device_id'] != body.device_id or str(data['original_id']) != ident:
                 raise ValueError('下载结果标识不匹配，未归档或删除。')
             return store.import_audio(data['path'], move=True, **{k: data[k] for k in (
@@ -173,7 +177,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                 work_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
                 if body.action == 'download':
                     return await download_batch(progress)
-                validate_connection(body.device_id, session_id)
+                validate_connection(body.device_id, session_id, connection_generation)
                 if body.action in ('start', 'pause'):
                     return await devices.feishu.record(body.action)
                 try:
@@ -188,10 +192,11 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                                 digest = await asyncio.to_thread(fingerprint, rid, body.device_id, ident)
                                 if digest != digests[index]:
                                     raise ValueError('本机备份已变化，停止删除。')
-                            validate_connection(body.device_id, session_id)
+                            validate_connection(body.device_id, session_id, connection_generation)
                             await progress(f'删除设备录音 {index + 1}/{len(body.ids)}')
                             await devices.feishu.delete(ident)
                             count += 1
+                            validate_connection(body.device_id, session_id, connection_generation)
                     return dict(count=count if body.action == 'delete' else len(records),
                                 records=records, record=records[-1] if records else None)
                 except Exception as error:

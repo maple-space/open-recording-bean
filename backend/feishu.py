@@ -31,6 +31,7 @@ class FeishuDevice:
         self.frame_cache = frame_cache
         self.delays = reconnect_delays
         self.lock = asyncio.Lock()
+        self._operation_generation = None
         self.client = None
         self.desired = False
         self.address = None
@@ -118,8 +119,17 @@ class FeishuDevice:
     async def _write(self, kind, ident, payload=b''):
         if not self.client or not self.client.is_connected:
             raise TransferInterrupted('录音豆尚未连接，请等待重连或搜索设备。')
+
+        async def send():
+            # wait_for schedules the coroutine separately: recheck at the actual
+            # send boundary, after any stop intent published while it was queued.
+            if self._operation_generation is not None and (
+                    not self.desired or self.state['connection_generation'] != self._operation_generation):
+                raise DeviceIdentityError('连接操作已变化，本次操作停止。')
+            await self.client.write_gatt_char(WRITE, command(kind, ident, payload), response=False)
+
         try:
-            await asyncio.wait_for(self.client.write_gatt_char(WRITE, command(kind, ident, payload), response=False), 10)
+            await asyncio.wait_for(send(), 10)
         except Exception as error:
             if not _transport_error(error):
                 raise
@@ -368,8 +378,9 @@ class FeishuDevice:
         if self.exclusive:  # Fail fast; never queue a download or delete behind hours of live audio.
             raise ValueError(self.exclusive)
         async with self.lock:
-            if not self.snapshot()['connected']:
+            if not self.desired or not self.snapshot()['connected']:
                 raise ValueError('录音豆未连接，请等待重连后重新发起操作。')
+            self._operation_generation = self.state['connection_generation']
             try:
                 yield
             except BaseException as error:
@@ -381,6 +392,8 @@ class FeishuDevice:
                     await self._close_client()
                 self.state['connection_status'] = 'reconnecting' if self.desired else 'disconnected'
                 raise
+            finally:
+                self._operation_generation = None
 
     async def _list(self):
         intent = self._connection_intent()
@@ -419,15 +432,28 @@ class FeishuDevice:
 
     async def delete(self, original_id):
         async with self.operation():
+            generation = self.state['connection_generation']
+
+            def stopped():
+                return not self.desired or self.state['connection_generation'] != generation
+
             if not any(row['original_id'] == str(original_id) for row in self.state['files']):
                 raise ValueError('设备目录中没有此录音，请刷新确认。')
             raw = await self._exchange(0x1a, 0x10, struct.pack('<I', int(original_id)))
             if raw[4] & 15 != 1:
                 raise ValueError(f'录音豆拒绝删除（状态码 {raw[4] & 15}）')
+            # The already-sent delete was acknowledged. Preserve that result,
+            # but a stop request forbids issuing its follow-up directory query.
+            if stopped():
+                return self.snapshot()
             await asyncio.sleep(.35)
+            if stopped():
+                return self.snapshot()
             try:
                 rows = await self._list()
             except Exception:
+                if stopped():
+                    return self.snapshot()
                 raise ValueError('设备已回应删除成功，但目录核验失败；不会重发删除，请刷新确认。') from None
             if any(row['original_id'] == str(original_id) for row in rows):
                 raise ValueError('设备已回应删除成功，但录音仍在目录中；请稍后刷新确认。')
