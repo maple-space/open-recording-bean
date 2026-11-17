@@ -211,29 +211,55 @@ class FeishuDevice:
         client_type, scanner = self._ble()
         system_lookup = platform == 'darwin' and self.ble_loader is None
 
-        async def original_device():
-            cached = self._known_peripheral
-            device = (cached[1] if system_lookup and cached and expected_sn
-                      and cached[0] == address.lower() and cached[2] == expected_sn else None)
+        async def advertised_device():
             try:
-                if device is None:
-                    device = await scanner.find_device_by_address(address, timeout=12)
-                    self._check_connection_intent(intent)
-                    if device is None and system_lookup:
-                        from .feishu_discovery import retrieve_known_macos_device
-                        device = await retrieve_known_macos_device(address)
+                device = await scanner.find_device_by_address(address, timeout=12)
             except Exception as error:
                 if not _transport_error(error):
                     raise
                 raise TransferInterrupted('暂时无法搜索原录音豆，请检查蓝牙连接。') from error
             self._check_connection_intent(intent)
-            if device is None:
-                raise TransferInterrupted('未发现原录音豆，请唤醒设备并断开手机 App。')
             return device
 
+        async def original_device():
+            cached = self._known_peripheral
+            if (system_lookup and cached and expected_sn
+                    and cached[0] == address.lower() and cached[2] == expected_sn):
+                return cached[1], True
+            device = await advertised_device()
+            if device is None and system_lookup:
+                try:
+                    from .feishu_discovery import retrieve_known_macos_device
+                    device = await retrieve_known_macos_device(address)
+                except Exception:
+                    # The optional private Bleak adapter can change independently
+                    # of normal discovery. Only this path tolerates such errors.
+                    self._known_peripheral = None
+                    self._check_connection_intent(intent)
+                    return await advertised_device(), False
+                self._check_connection_intent(intent)
+                return device, True
+            return device, False
+
+        async def identify(device):
+            if device is None:
+                raise TransferInterrupted('未发现原录音豆，请唤醒设备并断开手机 App。')
+            return await self._connect_identity(device, expected_sn, intent, client_type)
+
         try:
-            device = await original_device()
-            info = await self._connect_identity(device, expected_sn, intent, client_type)
+            device, from_system = await original_device()
+            try:
+                info = await identify(device)
+            except Exception as error:
+                if from_system:
+                    self._known_peripheral = None
+                if not from_system or isinstance(error, DeviceIdentityError) or device is None:
+                    raise
+                self._check_connection_intent(intent)
+                await self._close_client(reason='known_peripheral_fallback')
+                self._check_connection_intent(intent)
+                device = await advertised_device()
+                info = await identify(device)
         except TransferInterrupted:
             # A macOS peripheral UUID can rotate. Only an already-bound serial
             # authorizes probing a few recorder advertisements for that identity.

@@ -500,3 +500,183 @@ async def test_known_lookup_cancelled_at_ready_completion_never_retrieves(monkey
     with pytest.raises(asyncio.CancelledError):
         await task
     assert calls == [('ready',)]
+
+
+def incompatible_known_backend(monkeypatch, failure):
+    known = BLEDevice(ADDRESS, 'soundcore Work', ('private-layout', 'manager'))
+    advertised = SimpleNamespace(address=ADDRESS, name='soundcore Work')
+    state = dict(broken=False, advertised=False, stop=None, lookup_calls=0, scan_calls=0)
+    device = None
+
+    def fail(stage):
+        if state['broken'] and stage == failure:
+            if state['stop'] == 'intent':
+                device.request_disconnect()
+            if state['stop'] == 'cancel':
+                raise asyncio.CancelledError()
+            raise TypeError('unsupported private backend layout')
+
+    class Peer(FakeBLE):
+        instances = []
+        def __init__(self, target, **kwargs):
+            self.known = target is known
+            if self.known:
+                fail('constructor')
+            super().__init__(target, **kwargs)
+        async def connect(self):
+            await super().connect()
+            if self.known:
+                fail('connect')
+        async def start_notify(self, *args):
+            if self.known:
+                fail('notify')
+            await super().start_notify(*args)
+
+    class Scanner:
+        @staticmethod
+        async def find_device_by_address(address, **kwargs):
+            assert address == ADDRESS
+            state['scan_calls'] += 1
+            return advertised if state['advertised'] else None
+        @staticmethod
+        async def discover(**kwargs):
+            pytest.fail('initial fallback must not probe unselected devices')
+
+    async def lookup(address):
+        state['lookup_calls'] += 1
+        state['advertised'] = True
+        fail('lookup')
+        return known
+
+    monkeypatch.setattr('backend.feishu.platform', 'darwin')
+    monkeypatch.setattr('backend.devices._load_ble', lambda: (Peer, Scanner))
+    monkeypatch.setattr(helper(), 'retrieve_known_macos_device', lookup)
+    device = FeishuDevice(reconnect_delays=(60,))
+    return device, Peer, Scanner, state, known, advertised
+
+
+@pytest.mark.parametrize('cached,failure', [(False, 'lookup'), *[
+    (cached, failure) for cached in (False, True) for failure in ('constructor', 'connect', 'notify')]])
+async def test_incompatible_known_device_falls_back_to_selected_advertisement(monkeypatch, cached, failure):
+    device, Peer, _, state, known, advertised = incompatible_known_backend(monkeypatch, failure)
+    try:
+        if cached:
+            await device.connect(ADDRESS)
+            assert device._known_peripheral[1] is known
+        state['broken'] = True
+        if cached:
+            async with device.lock:
+                await device._open(ADDRESS, SERIAL)
+        else:
+            await device.connect(ADDRESS)
+        assert device.snapshot()['connected']
+        assert device.state['device_id'] == SERIAL
+        assert device._known_peripheral[1] is advertised
+        assert state['scan_calls'] == 2 and state['lookup_calls'] == 1
+        assert all(not peer.is_connected for peer in Peer.instances[:-1])
+        assert device.client.commands == [(1, 1), (0x1b, 0x0e)]
+    finally:
+        await device.disconnect()
+
+
+@pytest.mark.parametrize('cached', [False, True])
+@pytest.mark.parametrize('stop', ['intent', 'cancel'])
+async def test_known_compatibility_failure_never_falls_back_after_stop(monkeypatch, cached, stop):
+    device, Peer, _, state, _, _ = incompatible_known_backend(monkeypatch, 'notify')
+    try:
+        if cached:
+            await device.connect(ADDRESS)
+        state.update(broken=True, stop=stop)
+        error = DeviceIdentityError if stop == 'intent' else asyncio.CancelledError
+        with pytest.raises(error):
+            if cached:
+                async with device.operation():
+                    await device._open(ADDRESS, SERIAL)
+            else:
+                await device.connect(ADDRESS)
+        assert state['scan_calls'] == state['lookup_calls'] == 1
+        assert all(not peer.is_connected for peer in Peer.instances)
+        assert not device.snapshot()['connected']
+    finally:
+        await device.disconnect()
+
+
+async def test_known_lookup_error_after_stop_never_restarts_discovery(monkeypatch):
+    device, Peer, _, state, _, _ = incompatible_known_backend(monkeypatch, 'lookup')
+    state.update(broken=True, stop='intent')
+    try:
+        with pytest.raises(DeviceIdentityError):
+            await device.connect(ADDRESS)
+        assert state['scan_calls'] == 1
+        assert not Peer.instances
+    finally:
+        await device.disconnect()
+
+
+async def test_known_fallback_does_not_connect_neighbours_on_initial_selection(monkeypatch):
+    device, _, Scanner, state, _, _ = incompatible_known_backend(monkeypatch, 'constructor')
+    state['broken'] = True
+    async def missing(*args, **kwargs):
+        state['scan_calls'] += 1
+        return None
+    monkeypatch.setattr(Scanner, 'find_device_by_address', missing)
+    try:
+        with pytest.raises(TransferInterrupted):
+            await device.connect(ADDRESS)
+        assert device._known_peripheral is None
+        assert state['scan_calls'] == 2
+    finally:
+        await device.disconnect()
+
+
+@pytest.mark.parametrize('injected', [False, True])
+async def test_normal_scanned_constructor_programming_errors_remain_visible(monkeypatch, injected):
+    class BrokenPeer:
+        def __init__(self, *args, **kwargs):
+            raise TypeError('ordinary constructor bug')
+    monkeypatch.setattr('backend.feishu.platform', 'darwin')
+    monkeypatch.setattr('backend.devices._load_ble', lambda: (BrokenPeer, FakeScanner))
+    device = FeishuDevice(ble_loader=(lambda: (BrokenPeer, FakeScanner)) if injected else None)
+    with pytest.raises(TypeError, match='ordinary constructor bug'):
+        await device.connect(ADDRESS)
+
+
+async def test_known_fallback_still_rejects_wrong_serial_before_listing(monkeypatch):
+    device, Peer, _, state, _, _ = incompatible_known_backend(monkeypatch, 'constructor')
+    try:
+        await device.connect(ADDRESS)
+        state['broken'] = True
+        write = Peer.write_gatt_char
+        async def wrong_info(peer, uuid, data, **kwargs):
+            if not peer.known and data[5:7] == b'\x01\x01':
+                peer.commands.append((1, 1))
+                info = bytearray(51)
+                info[8:24] = b'OTHER12345678901'
+                peer.callback(None, packet(1, 1, info))
+            else:
+                await write(peer, uuid, data, **kwargs)
+        monkeypatch.setattr(Peer, 'write_gatt_char', wrong_info)
+        async with device.lock:
+            with pytest.raises(DeviceIdentityError, match='序列号'):
+                await device._open(ADDRESS, SERIAL)
+        assert device.client.commands == [(1, 1)]
+        assert device._known_peripheral is None
+        assert not device.snapshot()['connected']
+    finally:
+        await device.disconnect()
+
+
+async def test_invalid_known_identity_clears_verified_peripheral_cache(monkeypatch):
+    device, Peer, _, _, known, _ = incompatible_known_backend(monkeypatch, 'constructor')
+    try:
+        await device.connect(ADDRESS)
+        assert device._known_peripheral[1] is known
+        async def malformed(peer, uuid, data, **kwargs):
+            peer.callback(None, packet(1, 1, b'short'))
+        monkeypatch.setattr(Peer, 'write_gatt_char', malformed)
+        async with device.lock:
+            with pytest.raises(DeviceIdentityError):
+                await device._open(ADDRESS, SERIAL)
+        assert device._known_peripheral is None
+    finally:
+        await device.disconnect()

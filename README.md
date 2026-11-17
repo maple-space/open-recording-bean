@@ -111,6 +111,8 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 原地址失效时，服务会按已确认的序列号找回原设备，每轮最多核对 3 个候选。序列号不符或设备信息无法解析的地址，在本次连接期间不再连接，也不占后续轮次的名额；连接失败或超时仍可重试。排除记录只在内存中保存地址，不保存其他设备的序列号，手动连接或断开时清空。首次连接始终只尝试你选择的设备。
 
+macOS 系统设备查询与当前蓝牙库不兼容时，会清除失效的设备缓存并回退普通搜索；首次连接仍只连接你选择的设备，重连仍核对原序列号。
+
 等待自动重连时，点击 **断开连接 / 停止重连** 会及时停止等待，无需等到整段重试间隔结束，也不会继续尝试连接。停止或恢复过程出错时也会释放传输状态，已存音频缓存和任务的 **继续同步** 入口会保留。
 
 取消或服务重启后，连接原录音豆，在失败或已取消的后台任务旁点击 **继续同步**，即可复用这台电脑已有的归档和缓存。继续同步会跳过已不在设备目录中的录音，并列出编号和数量；一条都不剩时会明确提示。原任务被后续续同步任务成功完成后，不再显示继续入口。手机 App 的缓存不与电脑共享。同步期间保持电脑唤醒、本机服务运行；刷新或关闭网页不影响后台任务。完整步骤见 [录音同步指南](docs/recording-sync.md)。
@@ -313,6 +315,8 @@ After an unexpected Bluetooth disconnect, the service waits for the same recorde
 Once all audio has been received and verified, an unexpected disconnect while writing the local playback file does not prevent archiving. Stopping or changing devices still cancels it. Backup-and-delete retains strict connection checks and will not continue deleting after a disconnect. Temporary files from the current failed or cancelled export are moved to the Trash; audio caches and older leftovers are preserved.
 
 If the original address stops working, the service checks up to three candidates per recovery round against the recorder's verified serial number. Addresses with a different serial number or unreadable device information are skipped for the rest of that connection session and do not use later rounds' slots. Connection failures and timeouts remain retryable. Only rejected addresses are kept in memory, never other devices' serial numbers; manually connecting or disconnecting clears them. The first connection only attempts the device you selected.
+
+If macOS system-device lookup is incompatible with the Bluetooth library, the service clears the invalid device cache and falls back to normal discovery. Initial connections still use only the selected device; recovery still requires the original serial number.
 
 While waiting to reconnect, clicking **断开连接 / 停止重连** (disconnect / stop reconnecting) stops the wait promptly, without waiting for the full retry interval. No further connection attempts are made. Transfer state is released even if stopping or recovery fails. Cached audio and the job's **继续同步** (resume sync) action are preserved.
 
