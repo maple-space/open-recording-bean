@@ -269,17 +269,19 @@ async def download_incremental(device, original_id, output_dir, progress=None, i
                         if progress:
                             await report_progress(progress, receipt)
                     except TransferInterrupted as error:
-                        still_selected()
-                        receipt['cachedFrames'] = await source.call('count')
-                        progressed = receipt['cachedFrames'] > before
-                        # Repeated missing tail / stalled reads on an available device
-                        # need attention. An unavailable radio keeps waiting, without
-                        # imposing a total time limit on a legitimate long transfer.
-                        available = bool(device.client and device.client.is_connected)
-                        stalled = 0 if progressed else stalled + int(available or attempted_read)
-                        preserve_session = False
-                        with suppress(Exception):
-                            await release_transfer(close=True)
+                        try:
+                            still_selected()
+                            receipt['cachedFrames'] = await source.call('count')
+                            progressed = receipt['cachedFrames'] > before
+                            # Repeated missing tail / stalled reads on an available device
+                            # need attention. An unavailable radio keeps waiting, without
+                            # imposing a total time limit on a legitimate long transfer.
+                            available = bool(device.client and device.client.is_connected)
+                            stalled = 0 if progressed else stalled + int(available or attempted_read)
+                            preserve_session = False
+                        finally:
+                            with suppress(Exception):
+                                await release_transfer(close=True)
                         if stalled >= 8:
                             raise ValueError(f'多次重试仍未确认完整音频；已保存部分可继续同步：{error}') from None
                         receipt.update(status='reconnecting', retries=receipt['retries'] + 1,

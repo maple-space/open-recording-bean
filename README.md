@@ -111,7 +111,7 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 原地址失效时，服务会按已确认的序列号找回原设备，每轮最多核对 3 个候选。序列号不符或设备信息无法解析的地址，在本次连接期间不再连接，也不占后续轮次的名额；连接失败或超时仍可重试。排除记录只在内存中保存地址，不保存其他设备的序列号，手动连接或断开时清空。首次连接始终只尝试你选择的设备。
 
-等待自动重连时，点击 **断开连接 / 停止重连** 会及时停止等待，无需等到整段重试间隔结束，也不会继续尝试连接。已存音频缓存和任务的 **继续同步** 入口会保留。
+等待自动重连时，点击 **断开连接 / 停止重连** 会及时停止等待，无需等到整段重试间隔结束，也不会继续尝试连接。停止或恢复过程出错时也会释放传输状态，已存音频缓存和任务的 **继续同步** 入口会保留。
 
 取消或服务重启后，连接原录音豆，在失败或已取消的后台任务旁点击 **继续同步**，即可复用这台电脑已有的归档和缓存。手机 App 的缓存不与电脑共享。同步期间保持电脑唤醒、本机服务运行；刷新或关闭网页不影响后台任务。完整步骤见 [录音同步指南](docs/recording-sync.md)。
 
@@ -314,7 +314,7 @@ Once all audio has been received and verified, an unexpected disconnect while wr
 
 If the original address stops working, the service checks up to three candidates per recovery round against the recorder's verified serial number. Addresses with a different serial number or unreadable device information are skipped for the rest of that connection session and do not use later rounds' slots. Connection failures and timeouts remain retryable. Only rejected addresses are kept in memory, never other devices' serial numbers; manually connecting or disconnecting clears them. The first connection only attempts the device you selected.
 
-While waiting to reconnect, clicking **断开连接 / 停止重连** (disconnect / stop reconnecting) stops the wait promptly, without waiting for the full retry interval. No further connection attempts are made. Cached audio and the job's **继续同步** (resume sync) action are preserved.
+While waiting to reconnect, clicking **断开连接 / 停止重连** (disconnect / stop reconnecting) stops the wait promptly, without waiting for the full retry interval. No further connection attempts are made. Transfer state is released even if stopping or recovery fails. Cached audio and the job's **继续同步** (resume sync) action are preserved.
 
 After cancellation or a service restart, reconnect the original recorder and click **继续同步** (resume sync) beside the failed or cancelled job. This reuses local archives and cached audio; phone caches are separate. Keep the computer awake and the local service running. Refreshing or closing the webpage does not cancel the job. See the [recording sync guide](docs/recording-sync.md) (in Chinese).
 

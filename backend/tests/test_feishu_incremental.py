@@ -729,3 +729,44 @@ async def test_cancel_during_export_releases_cache_lock_without_final_file(tmp_p
     finally:
         await asyncio.gather(task, return_exceptions=True)
         await device.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['stopped', 'count_error', 'count_cancelled'])
+async def test_interrupted_recovery_releases_transfer_even_when_followup_fails(tmp_path, monkeypatch, failure):
+    from backend.feishu_cache import SourceWorker
+
+    radio = Radio(count=90)
+    device = await radio.device(tmp_path / 'cache')
+    radio.drop_at = 15
+    interrupted = False
+    original_lost = device.client.disconnected_callback
+    original_call = SourceWorker.call
+
+    def lost(client):
+        nonlocal interrupted
+        interrupted = True
+        original_lost(client)
+        if failure == 'stopped':
+            device.request_disconnect()
+
+    async def call(source, method, *args):
+        if interrupted and method == 'count' and failure != 'stopped':
+            if failure == 'count_cancelled':
+                raise asyncio.CancelledError()
+            raise ValueError('缓存计数不可用')
+        return await original_call(source, method, *args)
+
+    device.client.disconnected_callback = lost
+    monkeypatch.setattr(SourceWorker, 'call', call)
+    try:
+        error = asyncio.CancelledError if failure == 'count_cancelled' else ValueError
+        with pytest.raises(error):
+            await device.download(str(IDENT), tmp_path / 'out', idle_timeout=.05)
+        assert device.transfer is None
+        assert radio.requests == [0]
+        assert device.state['export']['status'] == 'failed'
+        with device.frame_cache.source(SERIAL, IDENT) as source:
+            assert source.count() == 15
+    finally:
+        await device.disconnect()
