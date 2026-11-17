@@ -667,7 +667,9 @@ async def test_download_jobs_archive_once_and_reach_local_asr(tmp_path, monkeypa
             await asyncio.gather(*list(app.state.jobs.tasks.values()))
             result = app.state.jobs.get(transcribe.json()['id'])
             assert result['status'] == 'completed', result
-            assert result['result']['record']['transcript'] == '本地识别接口测试'
+            detail = await client.get('/api/records/' + result['result']['record_id'])
+            assert detail.status_code == 200
+            assert detail.json()['transcript'] == '本地识别接口测试'
             assert calls[0][1] == 'sensevoice-small'
     finally:
         radio.pause.set()

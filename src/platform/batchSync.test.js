@@ -67,3 +67,13 @@ test('batch job shows current progress and separate completed and failed lists',
   assert.match(html, /已完成：123/)
   assert.match(html, /124：完整性冲突/)
 })
+
+test('legacy jobs with embedded recordings still show progress and failures', () => {
+  const record = { id: 'old', transcript: 'saved transcript' }
+  const legacy = { ...job, completed_ids: undefined, failed_items: undefined,
+    result: { record, records: [record], completed_ids: ['123'], failed_items: job.failed_items } }
+  const html = renderJobs([legacy])
+  assert.match(html, /已完成：123/)
+  assert.match(html, /124：完整性冲突/)
+  assert.match(html, /继续同步/)
+})

@@ -54,7 +54,7 @@ async def test_process_recognizes_corrects_and_summarizes(settings, engines, tmp
     settings['asr'] = 'api'
     store = Store()
     result = await process_record(store, store.get_record(store.record['id']), settings, tmp_path, None)
-    saved = result['record']
+    saved = store.get_record(result['record_id'])
     assert saved['raw_transcript'] == '明天十点开会'
     assert saved['transcript'] == saved['generated_transcript'] == '明天十点开会。'
     assert saved['transcript_provider'] == provider
@@ -70,7 +70,7 @@ async def test_process_recognizes_corrects_and_summarizes(settings, engines, tmp
 async def test_process_preserves_existing_transcript_and_skips_asr(settings, engines, tmp_path):
     store = Store(transcript='人工校对好的逐字稿')
     result = await process_record(store, deepcopy(store.record), settings, tmp_path, None)
-    assert result['record']['transcript'] == '人工校对好的逐字稿'
+    assert store.get_record(result['record_id'])['transcript'] == '人工校对好的逐字稿'
     engines[0].assert_not_called()
     engines[1].assert_not_called()
     assert engines[2].await_args.args[1] == '人工校对好的逐字稿'
@@ -152,8 +152,8 @@ async def test_asr_inflight_edit_is_preserved_and_used_for_summary(settings, eng
 
     engines[0].side_effect = recognize
     result = await process_record(store, deepcopy(store.record), settings, tmp_path, None)
-    assert result['record']['transcript'] == '用户处理中写下的逐字稿'
-    assert result['record']['generated_transcript'] == '明天十点开会。'
+    assert store.get_record(result['record_id'])['transcript'] == '用户处理中写下的逐字稿'
+    assert store.get_record(result['record_id'])['generated_transcript'] == '明天十点开会。'
     assert engines[2].await_args.args[1] == '用户处理中写下的逐字稿'
     assert result['notice']
 
@@ -169,8 +169,8 @@ async def test_correction_inflight_edit_is_preserved(settings, engines, tmp_path
 
     engines[1].side_effect = correct
     result = await process_record(store, deepcopy(store.record), settings, tmp_path, None, mode='transcribe')
-    assert result['record']['transcript'] == '中途人工校订'
-    assert result['record']['generated_transcript'] == '模型校订'
+    assert store.get_record(result['record_id'])['transcript'] == '中途人工校订'
+    assert store.get_record(result['record_id'])['generated_transcript'] == '模型校订'
     assert result['notice']
     engines[2].assert_not_called()
 
@@ -185,10 +185,10 @@ async def test_summary_inflight_edits_are_preserved(settings, engines, tmp_path)
 
     engines[2].side_effect = summarize
     result = await process_record(store, deepcopy(store.record), settings, tmp_path, None, mode='summarize')
-    assert result['record']['transcript'] == '新逐字稿'
-    assert result['record']['summary'] == '人工总结'
-    assert result['record']['generated_summary'] == '生成总结'
-    assert result['record']['summary_source_transcript'] == '原逐字稿'
+    assert store.get_record(result['record_id'])['transcript'] == '新逐字稿'
+    assert store.get_record(result['record_id'])['summary'] == '人工总结'
+    assert store.get_record(result['record_id'])['generated_summary'] == '生成总结'
+    assert store.get_record(result['record_id'])['summary_source_transcript'] == '原逐字稿'
     assert result['notice']
 
 
@@ -202,8 +202,8 @@ async def test_summary_does_not_replace_current_summary_if_source_was_edited(set
 
     engines[2].side_effect = summarize
     result = await process_record(store, deepcopy(store.record), settings, tmp_path, None, mode='summarize')
-    assert result['record']['summary'] == '原总结'
-    assert result['record']['generated_summary'] == '旧逐字稿生成的总结'
+    assert store.get_record(result['record_id'])['summary'] == '原总结'
+    assert store.get_record(result['record_id'])['generated_summary'] == '旧逐字稿生成的总结'
     assert result['notice']
 
 
@@ -212,7 +212,7 @@ async def test_local_api_transcription_never_calls_cli(settings, engines, tmp_pa
     settings['provider'] = 'api'
     store = Store()
     result = await process_record(store, deepcopy(store.record), settings, tmp_path, None, mode='transcribe')
-    assert result['record']['transcript'] == '明天十点开会'
+    assert store.get_record(result['record_id'])['transcript'] == '明天十点开会'
     engines[1].assert_not_called()
     engines[2].assert_not_called()
 

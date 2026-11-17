@@ -71,8 +71,9 @@ def test_manual_summary_survives_delayed_model_result(tmp_path, monkeypatch):
                 break
             time.sleep(.02)
         assert job['status'] == 'completed'
-        assert job['result']['record']['summary'] == '人工已修改'
-        assert job['result']['record']['generated_summary'] == '模型生成的总结'
+        saved = client.get('/api/records/' + job['result']['record_id']).json()
+        assert saved['summary'] == '人工已修改'
+        assert saved['generated_summary'] == '模型生成的总结'
 
 
 def test_api_generated_results_apply_when_original_fields_are_unchanged(tmp_path):

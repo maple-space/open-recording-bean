@@ -155,6 +155,10 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
     async def records():
         return await asyncio.to_thread(store.records)
 
+    @app.get('/api/records/{record_id}')
+    async def record_detail(record_id: str):
+        return await asyncio.to_thread(store.get_record, record_id)
+
     @app.post('/api/records/import')
     async def import_record(file: UploadFile = File(...), device_type: str = Form('local'),
                             device_id: str = Form('local'), original_id: str = Form(''),
@@ -357,7 +361,7 @@ def create_app(data_dir: Path | None = None, *, devices=None, realtime=None):
                             raise ValueError('录音正在移入废纸篓，请稍后重新下载')
                         saved = store.import_audio(data['path'], move=True, **{key: data[key] for key in (
                             'device_type', 'device_id', 'original_id', 'title', 'recorded_at', 'duration_ms') if key in data})
-                        return {'record': saved}
+                        return {'record_id': saved['id']}
                     finally:
                         await asyncio.to_thread(discard_file, data.get('path'), parent=work_dir)
             from .workflows import process_record

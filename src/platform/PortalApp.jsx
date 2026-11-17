@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowRight, Bluetooth, Bot, CheckCircle2, FileText, FolderOpen, House, LoaderCircle, Mic, RefreshCw, Settings, ShieldCheck, X } from 'lucide-react'
 import { summarizeTranscript, transcribeAudio } from './siliconflow.js'
-import { api, humanError, initialSettings, jobFailure, terminalStatuses } from './api.js'
+import { api, humanError, initialSettings, terminalStatuses } from './api.js'
 import { DevicePanel } from './DevicePanel.jsx'
 import { HomePage } from './HomePage.jsx'
 import { AgentPage } from './AgentPage.jsx'
@@ -9,7 +9,7 @@ import { Link } from './Link.jsx'
 import { project } from './project.js'
 import { RecordEditor, RecordWorkspace } from './RecordWorkspace.jsx'
 import { ConfirmDialog } from './ConfirmDialog.jsx'
-import { matchingArchive, processApiRecord, usesLocalTranscription, buildSelectedArchive } from './workflow.js'
+import { matchingArchive, processApiRecord, usesLocalTranscription, buildSelectedArchive, trackJobResult } from './workflow.js'
 import { JobPanel, PlatformSettings } from './SettingsJobs.jsx'
 import { LivePage } from './LivePage.jsx'
 import { LiveRecords } from './LiveRecords.jsx'
@@ -147,21 +147,13 @@ export default function PortalApp() {
 
   function updateJob(job) { setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))) }
 
-  async function submitJob(request, endpoint = '/api/jobs') {
-    let job = await api(endpoint, { method: 'POST', body: request })
+  async function submitJob(request, endpoint = '/api/jobs', options = {}) {
+    const job = await api(endpoint, { method: 'POST', body: request })
     updateJob(job)
-    while (!terminalStatuses.has(job.status)) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      job = await api(`/api/jobs/${encodeURIComponent(job.id)}`)
-      if (!mounted.current) return null
-      updateJob(job)
-    }
-    for (const record of job.result?.records || []) upsertRecord(record)
-    if (job.status === 'failed') throw jobFailure(job)
-    if (job.status === 'cancelled') throw new Error('任务已取消。')
-    if (job.result?.record) upsertRecord(job.result.record)
-    if (job.result?.notice) setNotice({ type: 'info', text: job.result.notice, recordId: job.result.record?.id })
-    return job.result
+    const result = await trackJobResult(job, { ...options, onUpdate: updateJob, isMounted: () => mounted.current })
+    if (result?.record) upsertRecord(result.record)
+    if (result?.notice) setNotice({ type: 'info', text: result.notice, recordId: result.record?.id })
+    return result
   }
 
   function upsertRecord(record) {
@@ -245,20 +237,20 @@ export default function PortalApp() {
   function downloadFiles(files) {
     const deviceId = deviceRef.current?.device_id
     return run('同步录音到本机', async () => {
-      const result = await submitJob({ action: 'download', device_id: deviceId, ids: files.map((file) => String(file.original_id)) }, '/api/devices/feishu/actions')
-      for (const record of result?.records || []) upsertRecord(record)
-      const lastRecord = result?.record
-      if (lastRecord) setDeviceRecordId(lastRecord.id)
-      setNotice({ type: 'success', text: `${result?.count || 0} 条录音已核验并保存在本机资料库${result?.skipped_ids?.length ? `，其中 ${result.skipped_ids.length} 条复用已有归档` : ''}；设备原件已保留。`, recordId: lastRecord?.id })
-      return lastRecord
+      const result = await submitJob({ action: 'download', device_id: deviceId, ids: files.map((file) => String(file.original_id)) }, '/api/devices/feishu/actions', { hydrateRecord: false })
+      const lastRecordId = result?.record_id || result?.record?.id
+      if (lastRecordId) setDeviceRecordId(lastRecordId)
+      setNotice({ type: 'success', text: `${result?.count || 0} 条录音已核验并保存在本机资料库${result?.skipped_ids?.length ? `，其中 ${result.skipped_ids.length} 条复用已有归档` : ''}；设备原件已保留。`, recordId: lastRecordId })
+      return result
     })
   }
 
   function resumeDownload(id) {
     return run('继续同步录音', async () => {
-      const result = await submitJob(undefined, `/api/jobs/${encodeURIComponent(id)}/resume`)
-      if (result?.record) setDeviceRecordId(result.record.id)
-      setNotice({ type: 'success', text: `${result?.count || 0} 条录音已核验并保存在本机资料库；设备原件已保留。`, recordId: result?.record?.id })
+      const result = await submitJob(undefined, `/api/jobs/${encodeURIComponent(id)}/resume`, { hydrateRecord: false })
+      const lastRecordId = result?.record_id || result?.record?.id
+      if (lastRecordId) setDeviceRecordId(lastRecordId)
+      setNotice({ type: 'success', text: `${result?.count || 0} 条录音已核验并保存在本机资料库；设备原件已保留。`, recordId: lastRecordId })
       return result
     })
   }
@@ -410,9 +402,8 @@ export default function PortalApp() {
           const saved = matchingArchive(recordsRef.current, KIND, request.deviceId, file.original_id)
           if (saved) await editorFlushers.current.get(saved.id)?.()
         }
-        const result = await submitJob({ action: 'delete', device_id: request.deviceId, ids: request.files.map((file) => String(file.original_id)), ...options }, '/api/devices/feishu/actions')
+        const result = await submitJob({ action: 'delete', device_id: request.deviceId, ids: request.files.map((file) => String(file.original_id)), ...options }, '/api/devices/feishu/actions', { hydrateRecord: false })
         const count = result?.count || 0
-        for (const record of result?.records || []) upsertRecord(record)
         setNotice({ type: 'success', text: options.mode === 'direct'
           ? `已直接删除 ${count} 条设备原录音；本次未创建备份，已有本机资料未改动。`
           : `已删除 ${count} 条设备原录音，本机备份已保留。` })

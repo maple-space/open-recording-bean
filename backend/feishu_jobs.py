@@ -120,12 +120,12 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                 await asyncio.to_thread(discard_file, data.get('path'), parent=work_dir)
 
         async def download_batch(progress):
-            records, completed_ids, failed_items, skipped_ids = [], [], [], []
+            archived_ids, completed_ids, failed_items, skipped_ids = [], [], [], []
             total = len(body.ids)
 
             def result():
-                return dict(count=len(records), total=total, records=records,
-                            record=records[-1] if records else None,
+                return dict(count=len(archived_ids), total=total, record_ids=archived_ids,
+                            record_id=archived_ids[-1] if archived_ids else None,
                             completed_ids=completed_ids, failed_items=failed_items,
                             skipped_ids=skipped_ids)
 
@@ -156,7 +156,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                         record = await archive(ident, rid, file_progress)
                         await asyncio.to_thread(fingerprint, rid, body.device_id, ident)
                         download_state()
-                        records.append(record)
+                        archived_ids.append(record['id'])
                         completed_ids.append(ident)
                         if exists:
                             skipped_ids.append(ident)
@@ -178,7 +178,7 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                 raise JobFailed(f'已完成 {len(completed_ids)}/{total} 条；{error}', result()) from None
 
         async def run_work(progress):
-            count, records, digests = 0, [], []
+            count, archived_ids, digests = 0, [], []
             async with lock:
                 work_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
                 if body.action == 'download':
@@ -190,7 +190,8 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                     if body.mode == 'backup':
                         for index, (ident, rid) in enumerate(zip(body.ids, record_ids)):
                             await progress(f'备份并核对录音 {index + 1}/{len(body.ids)}')
-                            records.append(await archive(ident, rid, progress))
+                            record = await archive(ident, rid, progress)
+                            archived_ids.append(record['id'])
                             digests.append(await asyncio.to_thread(fingerprint, rid, body.device_id, ident))
                     if body.action == 'delete':
                         for index, (ident, rid) in enumerate(zip(body.ids, record_ids)):
@@ -203,8 +204,8 @@ def register_feishu_actions(app, store, manager, devices, lock, record_busy):
                             await devices.feishu.delete(ident)
                             count += 1
                             validate_connection(body.device_id, session_id, connection_generation)
-                    return dict(count=count if body.action == 'delete' else len(records),
-                                records=records, record=records[-1] if records else None)
+                    return dict(count=count if body.action == 'delete' else len(archived_ids),
+                                record_ids=archived_ids, record_id=archived_ids[-1] if archived_ids else None)
                 except Exception as error:
                     raise ValueError(f'{"已删除 " + str(count) + " 条；" if count else ""}{error}') from None
 

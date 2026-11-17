@@ -68,7 +68,7 @@ async def process_record(store, record, settings, work_dir: Path, progress, *,
         # Prefer a user's newer transcript over a generated one for the next step.
         source = saved.get('transcript', '')
         if mode == 'transcribe':
-            return {'record': saved, 'notice': ' '.join(notices)}
+            return {'record_id': record_id, 'notice': ' '.join(notices)}
 
     if not source.strip():
         raise ValueError('逐字稿为空，识别成果已保存；请确认逐字稿后再生成总结')
@@ -86,5 +86,5 @@ async def process_record(store, record, settings, work_dir: Path, progress, *,
         patch['summary'] = text
     else:
         notices.append('生成总结已另存；保留了处理中手工修订的逐字稿和总结。')
-    saved = store.patch_record(record_id, patch, internal=True)
-    return {'record': saved, 'notice': ' '.join(notices)}
+    store.patch_record(record_id, patch, internal=True)
+    return {'record_id': record_id, 'notice': ' '.join(notices)}

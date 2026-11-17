@@ -1,3 +1,27 @@
+import { api, jobFailure, terminalStatuses } from './api.js'
+
+// Track separately from submission so callers can choose when to await the result.
+export async function trackJobResult(job, {
+  request = api, onUpdate = () => {}, isMounted = () => true,
+  wait = () => new Promise((resolve) => setTimeout(resolve, 1000)), hydrateRecord = true,
+} = {}) {
+  while (!terminalStatuses.has(job.status)) {
+    await wait()
+    job = await request(`/api/jobs/${encodeURIComponent(job.id)}`)
+    if (!isMounted()) return null
+    onUpdate(job)
+  }
+  if (job.status === 'failed') throw jobFailure(job)
+  if (job.status === 'cancelled') throw new Error('任务已取消。')
+  const result = job.result
+  if (hydrateRecord && result?.record_id && !result.record) {
+    const record = await request(`/api/records/${encodeURIComponent(result.record_id)}`)
+    // Never attach full text to the job already held in the page's job list.
+    return { ...result, record }
+  }
+  return result
+}
+
 export function matchingArchive(records, kind, deviceId, fileId) {
   if (!deviceId) return null
   return records.find((record) => record.device_type === kind && record.device_id === deviceId && String(record.original_id) === String(fileId)) || null

@@ -99,6 +99,8 @@ HF_ENDPOINT=https://hf-mirror.com ./start.sh models
 
 结束设备录音并关闭实时输入，在 **录音豆** 页面刷新列表，点击 **同步全部录音**。同步保留设备原件，不自动转写或总结；已有本机归档核验通过后会跳过。页面下方的 **后台任务** 显示当前第几条、已完成条数、文件百分比和失败清单。
 
+新任务只保存录音编号与处理进度，逐字稿和总结保留在资料库，不随每次同步重复写入任务历史。单条录音处理完成后，页面会读取资料库中的最新内容；已有任务历史继续可用。
+
 蓝牙意外断开后，服务会等待原设备恢复并补传缺口。单文件和整批任务都没有 60 分钟总时长限制，但仍会在长时间没有新数据时重连；设备离线等待期间可以取消。单条录音反复无进展或核验失败，会记录失败并继续其他录音，整批不会显示成全部成功。
 
 音频已经收齐并核验后，生成本机播放文件期间意外掉线，仍会完成归档；主动停止或切换设备仍会取消。备份后删除保持严格连接核验，掉线不会继续删除。本次失败或取消产生的临时文件会移入废纸篓，音频缓存和此前的残留文件保留。
@@ -295,6 +297,8 @@ A reboot is usually unnecessary. If the driver is not detected, the helper asks 
 ### Sync recordings to the library
 
 Stop recording and turn off realtime input. On the recorder page, refresh the file list and click **同步全部录音** (sync all recordings). This keeps the originals on the recorder and does not start transcription or summaries. Existing local recordings are checked and skipped when valid. **后台任务** (background jobs) shows the current file, completed count, file progress and any failures.
+
+New jobs store recording IDs and progress. Transcripts and summaries stay in the library instead of being copied into job history on every sync. After an individual recording is processed, the page loads its current library content. Existing job history remains available.
 
 After an unexpected Bluetooth disconnect, the service waits for the same recorder and resumes the missing audio. Neither an individual transfer nor the whole batch has a 60-minute total time limit. A lack of new data still triggers recovery, and waiting for an offline recorder can be cancelled. A file that repeatedly makes no progress or fails verification is listed as failed while the remaining recordings continue; a partially successful batch is not reported as fully completed.
 
